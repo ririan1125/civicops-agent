@@ -30,6 +30,7 @@ def clear_policy_index(db: Session) -> None:
 
 
 def _unique_title(title: str, used_titles: set[str]) -> str:
+    title = title[:240]
     if title not in used_titles:
         used_titles.add(title)
         return title
@@ -39,6 +40,12 @@ def _unique_title(title: str, used_titles: set[str]) -> str:
     unique = f"{title} ({suffix})"
     used_titles.add(unique)
     return unique
+
+
+def _truncate(value: str | None, max_length: int) -> str | None:
+    if value is None:
+        return None
+    return value[:max_length]
 
 
 def _sources_from_directory(directory: Path) -> list[DocumentSource]:
@@ -60,12 +67,13 @@ def index_policy_documents(
     directory: Path | None = None,
     *,
     include_remote: bool = False,
+    max_311_articles: int | None = None,
 ) -> IndexResult:
     if directory is not None:
         sources = _sources_from_directory(directory)
         warnings: list[str] = []
     else:
-        loaded = load_document_sources(include_remote=include_remote)
+        loaded = load_document_sources(include_remote=include_remote, max_311_articles=max_311_articles)
         sources = loaded.sources
         warnings = loaded.warnings
 
@@ -89,7 +97,7 @@ def index_policy_documents(
             policy_chunk = PolicyChunk(
                 document_id=document.id,
                 chunk_index=index,
-                heading=chunk.heading,
+                heading=_truncate(chunk.heading, 255),
                 content=chunk.content,
                 token_count=chunk.token_count,
             )

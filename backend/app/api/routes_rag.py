@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_session
 from app.schemas.rag import RAGAskRequest, RAGAskResponse, RAGSourceInfo, ReindexRequest, ReindexResponse
-from app.core.config import get_settings
 from app.services.rag.answerer import answer_rag_question
+from app.services.rag.embeddings import embedding_runtime_label
 from app.services.rag.indexer import index_policy_documents
 from app.services.rag.source_loader import available_remote_sources
 from app.services.tracing.trace_service import record_trace, timed_call
@@ -23,15 +23,16 @@ def reindex_policy_docs(
     db: Session = Depends(get_session),
 ) -> ReindexResponse:
     include_remote = True if request is None else request.include_remote
-    result = index_policy_documents(db, include_remote=include_remote)
-    settings = get_settings()
+    max_311_articles = None if request is None else request.max_311_articles
+    result = index_policy_documents(db, include_remote=include_remote, max_311_articles=max_311_articles)
+    embedding_provider, embedding_model = embedding_runtime_label()
     return ReindexResponse(
         documents_indexed=result.documents_indexed,
         chunks_indexed=result.chunks_indexed,
         local_sources_indexed=result.local_sources_indexed,
         remote_sources_indexed=result.remote_sources_indexed,
-        embedding_provider=settings.embedding_provider,
-        embedding_model=settings.embedding_model if settings.embedding_provider.lower() == "api" else f"local-hash-{settings.embedding_dimensions}",
+        embedding_provider=embedding_provider,
+        embedding_model=embedding_model,
         warnings=result.warnings or [],
     )
 

@@ -130,11 +130,13 @@ Flow:
 
 ```text
 Local project docs + official NYC311/Open Data sources
+  -> official NYC311 article discovery
   -> HTML/PDF/JSON source loading
   -> markdown-like text normalization
   -> heading-aware chunking
   -> embeddings
-  -> hybrid vector/keyword retrieval
+  -> BM25 + vector hybrid retrieval
+  -> query expansion and reranking
   -> evidence gate
   -> grounded answer with citations
 ```
@@ -144,11 +146,21 @@ Current source categories:
 - local operating policy docs in `sample_data/policies/`;
 - project architecture docs in `docs/`;
 - official NYC311 service request and status pages;
+- official NYC311 `article/?kanumber=KA-xxxxx` pages discovered from the NYC311 report-problems directory;
 - official NYC 311 dataset metadata from Socrata;
 - official NYC Open Data Technical Standards Manual pages;
 - optional official NYC Open Data PDF sources when the city host allows backend download.
 
 The official PDF host can return 403 to automated backend clients. For stability, the system indexes the official GitHub Pages version of the Technical Standards Manual and keeps PDF URLs as optional sources. If the PDF fetch succeeds, extracted PDF text is indexed too.
+
+The default live reindex crawls up to 120 official NYC311 article pages. This is controlled by:
+
+```text
+RAG_MAX_311_ARTICLES=120
+RAG_REMOTE_CONCURRENCY=6
+```
+
+Retrieval is not just direct context stuffing. The backend computes BM25 lexical scores, vector cosine scores, heading/phrase bonuses, and a reranked hybrid score before sending evidence to the chat model. Chinese questions also get small query-expansion terms for common NYC311 concepts such as service request status, complaints, Open Data metadata, and SQL safety.
 
 RAG answers return:
 
@@ -278,14 +290,20 @@ DEEPSEEK_API_KEY=your_key_here
 EMBEDDING_PROVIDER=api
 EMBEDDING_BASE_URL=your_embedding_base_url
 EMBEDDING_API_KEY=your_embedding_key
+EMBEDDING_MODEL=your_embedding_model
 ```
 
 Never commit real API keys.
+
+`local_hash` is a no-key fallback for reproducible demos and tests. For production-quality semantic retrieval, configure an OpenAI-compatible embedding service such as Jina, Voyage, Cohere, OpenAI-compatible BGE, SiliconFlow, or a self-hosted embedding endpoint.
 
 ## Current Boundaries
 
 - No production authentication yet.
 - Public admin-like endpoints are acceptable for this demo, but should be protected before real use.
 - Vector storage uses JSON vectors and application-side cosine scoring; larger corpora should use pgvector or a vector database.
+- RAG reindex is currently a synchronous admin endpoint; very large crawls should move to a background job queue.
 - Render free tier can sleep.
 - The system can stay fresh with NYC Open Data, but cannot exceed the upstream update cadence.
+
+Detailed RAG implementation notes in Chinese: [docs/ADVANCED_RAG_IMPLEMENTATION_CN.md](docs/ADVANCED_RAG_IMPLEMENTATION_CN.md).

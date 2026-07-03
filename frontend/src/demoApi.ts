@@ -131,7 +131,7 @@ function ragResponse(question: string) {
     citations: ragCitations,
     confidence: 0.84,
     refused: false,
-    retrieval_method: "hybrid_vector_keyword",
+    retrieval_method: "hybrid_bm25_vector_rerank",
     generation_provider: "mock",
     trace_id: 3
   };
@@ -189,7 +189,7 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
       planner_provider: "heuristic",
       plan_steps: [
         "Identify the question as a document-grounded policy/process request.",
-        "Retrieve relevant policy chunks with hybrid search.",
+        "Retrieve relevant chunks with BM25, vector similarity, query expansion, and reranking.",
         "Generate a grounded answer with citations or refuse weak evidence."
       ],
       confidence: 0.76,
@@ -199,10 +199,10 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
   }
   if (path === "/rag/reindex" && method === "POST") {
     return {
-      documents_indexed: 11,
-      chunks_indexed: 62,
-      local_sources_indexed: 4,
-      remote_sources_indexed: 7,
+      documents_indexed: 133,
+      chunks_indexed: 1802,
+      local_sources_indexed: 6,
+      remote_sources_indexed: 127,
       embedding_provider: "local_hash",
       embedding_model: "local-hash-384",
       warnings: []

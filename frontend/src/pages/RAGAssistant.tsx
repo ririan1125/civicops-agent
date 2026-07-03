@@ -4,7 +4,7 @@ import { api } from "../api";
 import type { RAGResponse } from "../types";
 
 export function RAGAssistant() {
-  const [question, setQuestion] = React.useState("What SQL statements is the agent allowed to execute?");
+  const [question, setQuestion] = React.useState("How do I check a NYC311 service request status?");
   const [result, setResult] = React.useState<RAGResponse | null>(null);
   const [status, setStatus] = React.useState("");
   const [warnings, setWarnings] = React.useState<string[]>([]);
@@ -20,7 +20,7 @@ export function RAGAssistant() {
       warnings: string[];
     }>("/rag/reindex", {
       method: "POST",
-      body: JSON.stringify({ include_remote: true })
+      body: JSON.stringify({ include_remote: true, max_311_articles: 120 })
     });
     setWarnings(response.warnings || []);
     setStatus(
@@ -36,7 +36,7 @@ export function RAGAssistant() {
     <main className="workspace">
       <section className="tool-header">
         <h1>Hybrid RAG Assistant</h1>
-        <p>Documents are embedded, retrieved with hybrid vector/keyword scoring, passed to a chat provider, and returned with citations.</p>
+        <p>Official NYC311 pages and project documents are chunked, embedded, retrieved with BM25/vector reranking, and answered with citations.</p>
       </section>
       <div className="ask-row">
         <textarea value={question} onChange={(event) => setQuestion(event.target.value)} />
@@ -68,7 +68,7 @@ export function RAGAssistant() {
               <article className="citation" key={citation.chunk_id}>
                 <strong>{citation.document_title}</strong>
                 <span>
-                  {citation.heading || "Untitled section"} · hybrid {citation.score} · vector {citation.vector_score ?? "n/a"} · lexical {citation.lexical_score ?? "n/a"}
+                  {citation.heading || "Untitled section"} | hybrid {citation.score} | vector {citation.vector_score ?? "n/a"} | lexical {citation.lexical_score ?? "n/a"}
                 </span>
                 {citation.source_url ? <a href={citation.source_url} target="_blank" rel="noreferrer">Open source</a> : null}
                 <p>{citation.snippet}</p>

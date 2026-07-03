@@ -13,6 +13,7 @@ class ReindexResponse(BaseModel):
 
 class ReindexRequest(BaseModel):
     include_remote: bool = True
+    max_311_articles: int | None = Field(default=None, ge=0, le=300)
 
 
 class RAGSourceInfo(BaseModel):
@@ -46,6 +47,6 @@ class RAGAskResponse(BaseModel):
     citations: list[Citation]
     confidence: float
     refused: bool
-    retrieval_method: str = "hybrid_vector_keyword"
+    retrieval_method: str = "hybrid_bm25_vector_rerank"
     generation_provider: str = "mock"
     trace_id: int | None = None

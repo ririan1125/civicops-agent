@@ -29,13 +29,16 @@ The SQL pipeline handles structured NYC 311 service request records.
 The RAG pipeline handles unstructured and semi-structured documentation.
 
 1. Local project documents, local policy markdown files, official NYC311 pages, official NYC Open Data pages, Socrata dataset metadata, and optional official PDFs are loaded as document sources.
+   The NYC311 loader also discovers official `article/?kanumber=KA-xxxxx` links from the NYC311 report-problems directory and indexes a bounded set of article pages.
 2. Each source is converted to markdown-like text with a source title and source URL or local path.
 3. The text is chunked by markdown headings and maximum character length.
 4. Each chunk is embedded and written to `policy_chunks` and `policy_chunk_embeddings`.
 5. A user question is embedded and compared with chunk embeddings.
-6. Retrieval combines vector similarity, keyword overlap, heading matches, and exact phrase signals.
+6. Retrieval combines BM25 lexical scoring, vector similarity, query expansion, heading matches, and exact phrase signals.
 7. If evidence is weak, the system refuses instead of guessing.
 8. If evidence is strong, the backend sends the question and retrieved evidence to the configured chat provider and returns citations.
+
+The current live refresh limit is controlled by `RAG_MAX_311_ARTICLES` and defaults to 120 official NYC311 article pages. The crawler uses bounded concurrency so a refresh can index a meaningful corpus without overwhelming the official source or the hosted backend.
 
 ## Routing Boundary
 
@@ -56,3 +59,5 @@ Official documentation can also change. The RAG reindex endpoint can refresh rem
 The public demo defaults to local deterministic embeddings and mock grounded generation when no external keys are configured. This keeps the public system reproducible without committing secrets. When API keys are configured, the same pipeline can use an external chat model and an OpenAI-compatible embedding service.
 
 The current vector store uses JSON vectors and application-side cosine scoring. This is simple and portable for the demo. A larger production corpus should use pgvector or another vector database, background jobs, source freshness metadata, and authenticated admin endpoints.
+
+Detailed Chinese implementation notes: [docs/ADVANCED_RAG_IMPLEMENTATION_CN.md](ADVANCED_RAG_IMPLEMENTATION_CN.md).

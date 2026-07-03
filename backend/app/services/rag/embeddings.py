@@ -56,18 +56,22 @@ def _api_embeddings(texts: list[str]) -> EmbeddingBatch:
     if not settings.embedding_base_url or not settings.embedding_api_key:
         raise EmbeddingProviderError("Embedding API requires EMBEDDING_BASE_URL and EMBEDDING_API_KEY.")
 
-    payload = {"model": settings.embedding_model, "input": texts}
     headers = {"Authorization": f"Bearer {settings.embedding_api_key}"}
+    batch_size = max(1, min(settings.embedding_batch_size, 256))
+    vectors: list[list[float]] = []
     with httpx.Client(timeout=60) as client:
-        response = client.post(
-            f"{settings.embedding_base_url.rstrip('/')}/v1/embeddings",
-            json=payload,
-            headers=headers,
-        )
-        response.raise_for_status()
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            payload = {"model": settings.embedding_model, "input": batch}
+            response = client.post(
+                f"{settings.embedding_base_url.rstrip('/')}/v1/embeddings",
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+            vectors.extend(item["embedding"] for item in sorted(data["data"], key=lambda item: item["index"]))
 
-    data = response.json()
-    vectors = [item["embedding"] for item in sorted(data["data"], key=lambda item: item["index"])]
     dimensions = len(vectors[0]) if vectors else 0
     return EmbeddingBatch(
         provider="api",
@@ -80,7 +84,7 @@ def _api_embeddings(texts: list[str]) -> EmbeddingBatch:
 def embed_texts(texts: list[str]) -> EmbeddingBatch:
     settings = get_settings()
     provider = settings.embedding_provider.lower()
-    if provider == "api":
+    if provider in {"api", "openai_compatible"}:
         return _api_embeddings(texts)
 
     dimensions = max(64, settings.embedding_dimensions)
@@ -94,6 +98,15 @@ def embed_texts(texts: list[str]) -> EmbeddingBatch:
 
 def embed_query(text: str) -> EmbeddingBatch:
     return embed_texts([text])
+
+
+def embedding_runtime_label() -> tuple[str, str]:
+    settings = get_settings()
+    provider = settings.embedding_provider.lower()
+    if provider in {"api", "openai_compatible"}:
+        return provider, settings.embedding_model
+    dimensions = max(64, settings.embedding_dimensions)
+    return "local_hash", f"local-hash-{dimensions}"
 
 
 def cosine_similarity(left: list[float] | None, right: list[float] | None) -> float:

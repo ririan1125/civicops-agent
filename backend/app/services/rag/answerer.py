@@ -10,6 +10,9 @@ from app.services.rag.indexer import index_policy_documents
 from app.services.rag.retriever import RetrievedChunk, retrieve_chunks
 
 
+RETRIEVAL_METHOD = "hybrid_bm25_vector_rerank"
+
+
 def _snippet(text: str, max_chars: int = 260) -> str:
     compact = re.sub(r"\s+", " ", text).strip()
     if len(compact) <= max_chars:
@@ -62,11 +65,13 @@ def _has_sufficient_evidence(retrieved: list[RetrievedChunk]) -> bool:
     if not retrieved:
         return False
     top = retrieved[0]
-    if len(top.matched_terms) < 2 or top.lexical_score <= 0:
+    if len(top.matched_terms) < 1 and top.lexical_score <= 0:
         return False
-    if top.vector_score >= 0.35:
+    if top.lexical_score >= 0.3 and top.score >= 0.18:
         return True
-    return top.score >= 0.12 and top.lexical_score >= 0.05
+    if top.vector_score >= 0.32 and top.score >= 0.16:
+        return True
+    return top.score >= 0.2 and top.lexical_score >= 0.08
 
 
 def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskResponse:
@@ -81,6 +86,7 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
             citations=[],
             confidence=0.0,
             refused=True,
+            retrieval_method=RETRIEVAL_METHOD,
             generation_provider="none",
         )
 
@@ -92,5 +98,6 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
         citations=[_citation(item) for item in retrieved],
         confidence=confidence,
         refused=False,
+        retrieval_method=RETRIEVAL_METHOD,
         generation_provider=provider,
     )
