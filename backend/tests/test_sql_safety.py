@@ -28,3 +28,8 @@ def test_limit_inside_comment_does_not_disable_default_limit() -> None:
 
 def test_destructive_statement_inside_block_comment_is_ignored() -> None:
     assert_safe_select("/* DROP TABLE service_requests; */ SELECT COUNT(*) FROM service_requests")
+
+
+def test_blocks_unbound_parameter_placeholders() -> None:
+    with pytest.raises(SQLSafetyError):
+        assert_safe_select("SELECT unique_key FROM service_requests WHERE unique_key = ?")

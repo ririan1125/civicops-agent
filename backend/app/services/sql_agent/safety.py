@@ -13,6 +13,8 @@ FORBIDDEN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+UNBOUND_PARAMETER_PATTERN = re.compile(r"(\?|%\s*s|\$\d+|:\w+)")
+
 
 class SQLSafetyError(ValueError):
     pass
@@ -37,6 +39,8 @@ def assert_safe_select(sql: str) -> None:
         raise SQLSafetyError("SQL is empty.")
     if _has_multiple_statements(stripped):
         raise SQLSafetyError("Multiple SQL statements are not allowed.")
+    if UNBOUND_PARAMETER_PATTERN.search(stripped):
+        raise SQLSafetyError("Unbound SQL parameters are not allowed.")
     if FORBIDDEN_PATTERN.search(stripped):
         raise SQLSafetyError("Only read-only SELECT queries are allowed.")
     if not stripped.lower().startswith("select"):

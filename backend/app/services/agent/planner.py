@@ -149,6 +149,10 @@ def _coerce_llm_plan(raw: str) -> AgentPlan | None:
 
 
 def plan_agent(question: str) -> AgentPlan:
+    q = question.lower()
+    if any(keyword in q for keyword in RAG_KEYWORDS):
+        return _rag_plan()
+
     if not llm_planning_enabled():
         return _heuristic_plan(question)
 

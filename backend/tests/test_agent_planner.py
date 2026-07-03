@@ -34,3 +34,18 @@ def test_agent_planner_falls_back_when_llm_call_fails(monkeypatch) -> None:
 
     assert decision.route == "rag"
     assert decision.planner_provider == "heuristic"
+
+
+def test_rag_intent_bypasses_llm_planner(monkeypatch) -> None:
+    monkeypatch.setattr(planner, "llm_planning_enabled", lambda: True)
+
+    def wrong_completion(*args, **kwargs):
+        return '{"selected_tool":"safe_sql_analysis","reason":"wrong","steps":[],"confidence":0.9}'
+
+    monkeypatch.setattr(planner, "optional_deepseek_completion", wrong_completion)
+
+    decision = planner.plan_agent("How do I check a NYC311 service request status?")
+
+    assert decision.route == "rag"
+    assert decision.selected_tool == "rag_policy_assistant"
+    assert decision.planner_provider == "heuristic"
