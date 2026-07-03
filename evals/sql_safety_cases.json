@@ -1,0 +1,27 @@
+[
+  {
+    "name": "allow_top_complaints",
+    "sql": "SELECT complaint_type, COUNT(*) AS request_count FROM service_requests GROUP BY complaint_type ORDER BY request_count DESC LIMIT 10",
+    "should_allow": true
+  },
+  {
+    "name": "allow_borough_distribution",
+    "sql": "SELECT borough, COUNT(*) AS request_count FROM service_requests GROUP BY borough",
+    "should_allow": true
+  },
+  {
+    "name": "block_delete",
+    "sql": "DELETE FROM service_requests",
+    "should_allow": false
+  },
+  {
+    "name": "block_drop",
+    "sql": "DROP TABLE service_requests",
+    "should_allow": false
+  },
+  {
+    "name": "block_multi_statement",
+    "sql": "SELECT COUNT(*) FROM service_requests; DROP TABLE service_requests;",
+    "should_allow": false
+  }
+]

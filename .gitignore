@@ -1,0 +1,31 @@
+backend/.venv/
+backend/.pytest_cache/
+backend/**/__pycache__/
+*.pyc
+.env
+*.env
+!.env.example
+backend/.env
+frontend/.env
+.pytest_cache/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+*.tsbuildinfo
+.coverage
+htmlcov/
+*.sqlite
+*.db
+.DS_Store
+
+# Local learning-system exports are useful on this machine but too noisy for the portfolio repo.
+obsidian_export/
+generate_obsidian*.cjs
+.agents/
+.codex/
+
+# Local research/study documents are not part of the public project repository.
+docs/*.md
+!docs/DEMO_SCRIPT.md
+!docs/PROJECT_OVERVIEW_CN.md
