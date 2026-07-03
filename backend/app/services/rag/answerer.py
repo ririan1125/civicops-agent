@@ -51,13 +51,22 @@ def _compose_answer(question: str, retrieved: list[RetrievedChunk]) -> tuple[str
     return completion.content, completion.provider
 
 
+def _asks_for_private_contact(question: str) -> bool:
+    normalized = question.lower()
+    contact_terms = ["phone", "email", "address", "contact", "telephone", "手机", "电话", "邮箱", "地址", "联系方式"]
+    private_terms = ["private", "personal", "home", "私人", "个人", "家庭"]
+    return any(term in normalized for term in contact_terms) and any(term in normalized for term in private_terms)
+
+
 def _has_sufficient_evidence(retrieved: list[RetrievedChunk]) -> bool:
     if not retrieved:
         return False
     top = retrieved[0]
+    if len(top.matched_terms) < 2 or top.lexical_score <= 0:
+        return False
     if top.vector_score >= 0.35:
         return True
-    return top.score >= 0.08 and top.lexical_score > 0
+    return top.score >= 0.12 and top.lexical_score >= 0.05
 
 
 def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskResponse:
@@ -65,7 +74,7 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
         index_policy_documents(db, include_remote=get_settings().rag_include_remote_sources)
 
     retrieved = retrieve_chunks(db, question, top_k=top_k)
-    if not _has_sufficient_evidence(retrieved):
+    if _asks_for_private_contact(question) or not _has_sufficient_evidence(retrieved):
         return RAGAskResponse(
             question=question,
             answer="I cannot answer confidently from the indexed policy documents.",
