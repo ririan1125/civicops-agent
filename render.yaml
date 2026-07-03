@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: civicops-agent-api-ririan1125
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: APP_NAME
+        value: CivicOps Agent
+      - key: APP_VERSION
+        value: 1.0.0
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: civicops-agent-db
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://ririan1125.github.io,https://ririan1125.github.io/civicops-agent,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173
+      - key: LLM_PROVIDER
+        value: mock
+      - key: DEEPSEEK_API_KEY
+        value: ""
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: EMBEDDING_PROVIDER
+        value: local_hash
+      - key: EMBEDDING_API_KEY
+        value: ""
+      - key: EMBEDDING_BASE_URL
+        value: ""
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: EMBEDDING_DIMENSIONS
+        value: 384
+
+databases:
+  - name: civicops-agent-db
+    databaseName: civicops
+    user: civicops
+    plan: free
