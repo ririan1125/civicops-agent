@@ -13,3 +13,9 @@ def test_agent_routes_policy_questions_to_rag_tool() -> None:
     decision = route_question("What policy explains allowed SQL statements?")
     assert decision.route == "rag"
     assert decision.selected_tool == "rag_policy_assistant"
+
+
+def test_agent_routes_311_faq_questions_to_rag_tool() -> None:
+    decision = route_question("How do I check a NYC311 service request status?")
+    assert decision.route == "rag"
+    assert decision.selected_tool == "rag_policy_assistant"

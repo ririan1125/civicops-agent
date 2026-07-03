@@ -1,159 +1,213 @@
 # CivicOps Agent
 
-**Urban Service Request Triage & Operations Copilot**
+Urban service request analytics, safe SQL, hybrid RAG, and traceable agent workflow for NYC 311 operations.
 
-[Live App](https://ririan1125.github.io/civicops-agent/) · [Live API](https://civicops-agent-api-ririan1125.onrender.com/docs) · [Deploy Backend on Render](https://render.com/deploy?repo=https://github.com/ririan1125/civicops-agent)
+[Live App](https://ririan1125.github.io/civicops-agent/) | [Live API Docs](https://civicops-agent-api-ririan1125.onrender.com/docs) | [Deploy Backend on Render](https://render.com/deploy?repo=https://github.com/ririan1125/civicops-agent)
 
-CivicOps Agent is a full-stack operations copilot for city service request teams. It imports real NYC 311 data, answers operational metric questions with a safe SQL tool, answers policy/process questions with hybrid RAG, and records every tool run for auditability.
+## What This System Does
 
-CivicOps Agent 是一个基于真实 NYC 311 城市服务请求数据的城市运营助手。它解决的问题是：运营人员需要快速看清投诉趋势、区域分布、部门工作量和处理流程依据，同时系统必须保证 SQL 只读、回答可引用、执行过程可追踪。
+CivicOps Agent helps analyze NYC 311 service request operations. It has two knowledge paths:
 
-## What It Does
+1. SQL path for structured operational data.
+2. RAG path for policy, process, metadata, and project architecture documents.
 
-- Imports real NYC 311 service request data from the official NYC Open Data API.
-- Cleans and stores records in PostgreSQL.
-- Shows operations dashboard metrics in React.
-- Plans and executes natural-language metric questions through a read-only SQL tool.
-- Routes user questions through an agent planner that selects SQL, RAG, or clarification.
-- Answers policy/process questions through hybrid vector/keyword RAG with citations.
-- Records execution traces for SQL/RAG/tool actions.
-- Runs basic evaluation suites for SQL safety and RAG citation/refusal behavior.
-- Ships with Docker Compose for a reproducible demo.
+The system imports real NYC 311 records from the official NYC Open Data API, stores cleaned records in PostgreSQL, answers metric questions with a read-only SQL tool, answers document questions with hybrid RAG, and records execution traces for inspection.
 
-## 项目功能
+## 中文说明
 
-- 从官方 NYC Open Data API 接入真实 NYC 311 服务请求数据。
-- 清洗数据并写入 PostgreSQL。
-- 用 React 展示城市运营 dashboard。
-- 用 Agent planner 判断问题应该走 SQL、RAG，还是需要澄清。
-- 支持自然语言问数，并通过安全 SQL 工具执行只读查询。
-- 用 SQL safety guard 阻止 `DELETE`、`DROP`、`UPDATE` 等危险语句。
-- 用 hybrid RAG 回答政策/流程问题，并返回 citations、vector score、lexical score。
-- 记录 Agent execution trace，便于 debug、审计和评估。
-- 内置 eval cases，评估 SQL safety 和 RAG citation/refusal。
-- 使用 Docker Compose 一键启动前端、后端和数据库。
+CivicOps Agent 是一个城市服务请求运营分析 Agent。它不是普通聊天机器人，而是把真实 NYC 311 数据、SQL 分析、官方文档 RAG、工具路由、执行 trace 放在同一个工作台里。
 
-## Tech Stack
+它主要解决两类问题：
 
-| Layer | Stack |
-| --- | --- |
-| Backend | Python, FastAPI, Pydantic, SQLAlchemy |
-| Database | PostgreSQL in Docker, SQLite fallback for local tests |
-| Frontend | React, TypeScript, Vite |
-| Data | NYC 311 Service Requests API |
-| Agent | Structured planner, tool registry, SQL/RAG/clarification tools, execution traces |
-| RAG | Markdown policy docs, chunking, embeddings, hybrid retrieval, grounded generation, citations, refusal |
-| Evaluation | JSON eval cases, SQL safety pass rate, RAG citation/refusal/evidence hit rate |
-| Deployment | Docker Compose |
-
-## Architecture
-
-```mermaid
-flowchart LR
-  NYC["NYC 311 API"] --> Ingest["FastAPI Ingestion Service"]
-  Ingest --> DB[("PostgreSQL")]
-  DB --> Dash["Dashboard APIs"]
-  DB --> SQLTool["Safe SQL Tool"]
-  Docs["Policy Markdown Docs"] --> Chunk["Chunk + Embed"]
-  Chunk --> RAG["Hybrid Retriever"]
-  User["React Console"] --> Dash
-  User --> Agent["Agent Planner"]
-  Agent --> SQLTool
-  Agent --> RAG
-  RAG --> Chat["Chat Provider"]
-  SQLTool --> Trace["Execution Trace"]
-  Chat --> Trace
-  Trace --> User
-```
-
-## Quick Start With Docker
-
-Prerequisites:
-
-- Docker Desktop
-- Git
-
-Run:
-
-```powershell
-git clone https://github.com/ririan1125/civicops-agent.git
-cd civicops-agent
-copy .env.example .env
-docker compose up --build
-```
-
-Open:
-
-- Frontend: http://localhost:3000
-- Backend API docs: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
+- 数据问题：例如投诉最多的类型是什么、哪个区请求最多、还有多少未关闭请求、哪个部门工作量最大。
+- 文档/流程问题：例如 NYC311 服务请求状态怎么查、系统允许什么 SQL、Open Data 字段是什么意思、什么时候需要人工复核、RAG 证据不足时怎么办。
 
 ## Live Deployment
 
-The public frontend is deployed with GitHub Pages:
+Frontend:
 
 ```text
 https://ririan1125.github.io/civicops-agent/
 ```
 
-The live backend is deployed on Render:
+Backend:
 
 ```text
 https://civicops-agent-api-ririan1125.onrender.com
 ```
 
-The public frontend calls the Render FastAPI service, which uses PostgreSQL and can ingest real NYC 311 records. The backend runs on Render's free instance type, so the first request after inactivity can take extra time while the service wakes up.
+The backend runs on Render's free tier, so the first request after inactivity can take extra time while the service wakes up.
 
-## Cloud Backend Deployment
+## Architecture
 
-The repository includes `render.yaml` for deploying the FastAPI backend and PostgreSQL database on Render.
+```mermaid
+flowchart LR
+  NYC["Official NYC 311 API"] --> Ingestion["Ingestion Service"]
+  Ingestion --> DB[("PostgreSQL")]
+  DB --> Dashboard["Dashboard APIs"]
+  DB --> SQLTool["Safe SQL Tool"]
+  Docs["Local + Official Docs"] --> Loader["Source Loader"]
+  Loader --> Chunk["Chunk + Embed"]
+  Chunk --> RAG["Hybrid Retriever"]
+  User["React UI"] --> Agent["Agent Planner"]
+  Agent --> SQLTool
+  Agent --> RAG
+  SQLTool --> Trace["Execution Trace"]
+  RAG --> Trace
+  Trace --> User
+```
 
-One-click deploy:
+Detailed architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-[Deploy Backend on Render](https://render.com/deploy?repo=https://github.com/ririan1125/civicops-agent)
+## SQL Data Pipeline
 
-Current backend URL:
+The SQL pipeline handles structured NYC 311 rows.
+
+Flow:
 
 ```text
-https://civicops-agent-api-ririan1125.onrender.com
+NYC Open Data API
+  -> fetch JSON records
+  -> clean fields
+  -> upsert by unique_key
+  -> PostgreSQL service_requests table
+  -> dashboard and SQL agent queries
 ```
 
-The GitHub Pages workflow builds the frontend with:
+Core fields:
+
+- `unique_key`
+- `created_date`
+- `closed_date`
+- `agency`
+- `agency_name`
+- `complaint_type`
+- `descriptor`
+- `location_type`
+- `incident_zip`
+- `borough`
+- `status`
+- `resolution_description`
+- `latitude`
+- `longitude`
+- `raw_payload`
+
+The SQL agent can use a DeepSeek schema-aware planner when configured. Without an API key, it uses deterministic safe templates. Either way, the backend validates SQL before execution.
+
+SQL safety rules:
+
+- only one `SELECT` statement is allowed;
+- destructive keywords are blocked;
+- comments and multiple statements are blocked;
+- row listing queries get a default `LIMIT`;
+- execution goes through SQLAlchemy;
+- every run is traced.
+
+## Data Freshness
+
+NYC 311 data changes every day. The system supports:
+
+- manual import with `POST /ingestion/run`;
+- incremental sync with `POST /ingestion/sync-latest`;
+- daily GitHub Actions sync against the live Render backend.
+
+Incremental sync checks the latest `created_date` already stored, looks back a configurable number of days, fetches recent official records again, and upserts by `unique_key`. This captures both new service requests and recent status changes.
+
+Default sync settings:
 
 ```text
-VITE_API_BASE_URL=https://civicops-agent-api-ririan1125.onrender.com
+INGESTION_SYNC_LIMIT=5000
+INGESTION_SYNC_LOOKBACK_DAYS=7
 ```
 
-If the backend URL changes, update `.github/workflows/deploy-pages.yml` or set the GitHub repository variable `VITE_API_BASE_URL`, then rerun the workflow.
+Important boundary: this can stay current with the public NYC Open Data source, but it cannot be more real-time than the upstream dataset update cadence.
 
-## Docker 快速启动
+## RAG Document Pipeline
 
-前置条件：
+The RAG pipeline handles unstructured and semi-structured documents.
 
-- 已安装 Docker Desktop
-- 已安装 Git
+Flow:
 
-运行：
-
-```powershell
-git clone https://github.com/ririan1125/civicops-agent.git
-cd civicops-agent
-copy .env.example .env
-docker compose up --build
+```text
+Local project docs + official NYC311/Open Data sources
+  -> HTML/PDF/JSON source loading
+  -> markdown-like text normalization
+  -> heading-aware chunking
+  -> embeddings
+  -> hybrid vector/keyword retrieval
+  -> evidence gate
+  -> grounded answer with citations
 ```
 
-打开：
+Current source categories:
 
-- 前端页面：http://localhost:3000
-- 后端 API 文档：http://localhost:8000/docs
-- 健康检查：http://localhost:8000/health
+- local operating policy docs in `sample_data/policies/`;
+- project architecture docs in `docs/`;
+- official NYC311 service request and status pages;
+- official NYC 311 dataset metadata from Socrata;
+- official NYC Open Data Technical Standards Manual pages;
+- optional official NYC Open Data PDF sources when the city host allows backend download.
+
+The official PDF host can return 403 to automated backend clients. For stability, the system indexes the official GitHub Pages version of the Technical Standards Manual and keeps PDF URLs as optional sources. If the PDF fetch succeeds, extracted PDF text is indexed too.
+
+RAG answers return:
+
+- answer text;
+- source citations;
+- document title;
+- source URL when available;
+- chunk id;
+- heading;
+- snippet;
+- hybrid score;
+- vector score;
+- lexical score;
+- matched terms.
+
+## Agent Routing
+
+The planner chooses one of three routes:
+
+- `safe_sql_analysis` for structured metrics, counts, rankings, status breakdowns, boroughs, agencies, and trends.
+- `rag_policy_assistant` for policy, process, FAQ, metadata, source, governance, and project architecture questions.
+- `clarification` when the request is ambiguous.
+
+Examples:
+
+```text
+What are the top complaint types?
+```
+
+This should route to SQL.
+
+```text
+How do I check a NYC311 service request status?
+```
+
+This should route to RAG.
+
+## Key API Endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Backend health check |
+| `POST /ingestion/run` | Import official NYC 311 records |
+| `POST /ingestion/sync-latest` | Incrementally sync new/recent NYC 311 records |
+| `GET /dashboard/summary` | Dashboard metrics and data freshness |
+| `POST /agent/sql` | Natural-language SQL analysis |
+| `POST /agent/route` | Agent tool routing and execution |
+| `GET /rag/sources` | List configured official remote RAG sources |
+| `POST /rag/reindex` | Rebuild local and official document index |
+| `POST /rag/ask` | Hybrid RAG question answering |
+| `GET /traces` | Execution trace history |
+| `POST /evals/run` | SQL/RAG evaluation suite |
 
 ## Local Development
 
 Backend:
 
 ```powershell
-cd backend
+cd D:\Backup\Documents\agent开发\backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 copy .env.example .env
@@ -163,178 +217,75 @@ copy .env.example .env
 Frontend:
 
 ```powershell
-cd frontend
+cd D:\Backup\Documents\agent开发\frontend
 npm install
 npm run dev
 ```
 
-Run tests:
+Docker:
 
 ```powershell
-cd backend
+cd D:\Backup\Documents\agent开发
+copy .env.example .env
+docker compose up --build
+```
+
+Open:
+
+- Frontend: http://localhost:3000
+- Backend docs: http://localhost:8000/docs
+- Health: http://localhost:8000/health
+
+## Useful Commands
+
+Run backend tests:
+
+```powershell
+cd D:\Backup\Documents\agent开发\backend
 .\.venv\Scripts\python -m pytest -q
 ```
 
-## Demo Flow
+Refresh official RAG sources locally:
 
-1. Open the dashboard.
-2. Import 1,000 to 3,000 NYC 311 records.
-3. Review total requests, open/closed counts, top complaint types, borough distribution, agency workload, and daily trend.
-4. Open Agent Run and ask a routed question:
-
-```text
-What policy explains allowed SQL statements?
+```powershell
+curl -X POST http://localhost:8000/rag/reindex `
+  -H "Content-Type: application/json" `
+  -d "{\"include_remote\":true}"
 ```
 
-5. Ask the SQL tool directly:
+Sync latest 311 data locally:
 
-```text
-What are the top complaint types?
+```powershell
+curl -X POST http://localhost:8000/ingestion/sync-latest `
+  -H "Content-Type: application/json" `
+  -d "{\"limit\":5000,\"lookback_days\":7}"
 ```
 
-6. Reindex RAG docs and ask:
-
-```text
-What SQL statements is the agent allowed to execute?
-```
-
-7. Open traces to inspect planner output, selected tool, tool input, output, route, status, and latency.
-8. Run evals to see SQL safety and RAG citation/refusal/evidence metrics.
-
-Detailed script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
-
-## Key API Endpoints
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health` | Backend health check |
-| `POST /ingestion/run` | Import real NYC 311 records |
-| `GET /dashboard/summary` | Dashboard metrics |
-| `POST /agent/sql` | Natural-language SQL analysis |
-| `POST /agent/route` | Plan a tool call and route to SQL/RAG/clarification |
-| `POST /rag/reindex` | Index local policy documents and write chunk embeddings |
-| `POST /rag/ask` | Hybrid RAG question answering with citations |
-| `GET /traces` | List execution traces |
-| `POST /evals/run` | Run SQL/RAG evaluation cases |
-
-## RAG System
-
-The RAG assistant indexes markdown documents in `sample_data/policies/`.
-
-Pipeline:
-
-1. Parse local markdown policy/process documents.
-2. Chunk documents by heading and size.
-3. Generate and store one embedding per chunk.
-4. Retrieve candidate chunks with hybrid vector/keyword scoring.
-5. Rerank with vector score, lexical overlap, heading match, and phrase match.
-6. Gate weak evidence before generation.
-7. Call the configured chat provider to generate a grounded answer from retrieved evidence.
-8. Return citations with document title, chunk ID, section heading, snippet, hybrid score, lexical score, vector score, and matched terms.
-9. Refuse weak-evidence questions instead of guessing.
+## LLM and Embeddings
 
 Default no-key mode:
 
-- `LLM_PROVIDER=mock` uses a local mock chat provider so the app and tests run without secrets.
-- `EMBEDDING_PROVIDER=local_hash` uses deterministic local hash embeddings so reindexing works without an embedding API.
+```text
+LLM_PROVIDER=mock
+EMBEDDING_PROVIDER=local_hash
+```
 
 Production-like mode:
-
-- Set `LLM_PROVIDER=deepseek` and `DEEPSEEK_API_KEY` to use DeepSeek for planner/RAG answer generation.
-- Set `EMBEDDING_PROVIDER=api`, `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, and `EMBEDDING_MODEL` to use an OpenAI-compatible embedding service.
-
-Optional DeepSeek support:
-
-- Default mode is `LLM_PROVIDER=mock`, so the demo runs without an API key.
-- To use DeepSeek for evidence-grounded answer generation, set:
 
 ```text
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_key_here
+EMBEDDING_PROVIDER=api
+EMBEDDING_BASE_URL=your_embedding_base_url
+EMBEDDING_API_KEY=your_embedding_key
 ```
 
-Never commit real keys. Keep them only in `.env`.
+Never commit real API keys.
 
-## Safe SQL Agent
+## Current Boundaries
 
-The SQL tool is intentionally conservative.
-
-Flow:
-
-1. User asks a natural-language metrics question.
-2. If DeepSeek is configured, a schema-aware planner may generate one JSON-structured SQL plan.
-3. Without DeepSeek, deterministic templates provide a safe fallback.
-4. SQL safety guard strips comments, blocks multiple statements, blocks destructive keywords, parses with `sqlglot`, and requires a single `SELECT`.
-5. A default `LIMIT` is enforced for listing queries.
-6. Query executes through SQLAlchemy.
-7. Results, generated SQL, assumptions, confidence, and trace ID are returned.
-
-This design allows LLM-assisted planning when configured, but backend validation still owns execution safety.
-
-## Evaluation
-
-Evaluation files live in `evals/`.
-
-- `sql_safety_cases.json`: verifies that allowed SELECT queries pass, destructive SQL is blocked, and SQL comments do not bypass guards.
-- `rag_cases.json`: verifies citation behavior, evidence-term hits, and weak-evidence refusal.
-
-Run from the UI or API:
-
-```powershell
-curl -X POST http://localhost:8000/evals/run
-```
-
-## Security Notes
-
-- Real API keys must stay in `.env`.
-- `.env` is ignored by Git.
-- `.env.example` contains placeholders only.
-- SQL execution is read-only.
-- Agent actions are traced.
-- RAG refuses when evidence is weak.
-
-## Project Structure
-
-```text
-backend/
-  app/
-    api/              FastAPI routes
-    core/             settings
-    db/               SQLAlchemy models/session
-    schemas/          Pydantic schemas
-    services/         ingestion, dashboard, SQL agent, RAG, evals, tracing
-  tests/
-frontend/
-  src/
-    api.ts            API client
-    types.ts          Shared frontend types
-    components/       Reusable UI pieces
-    pages/            Dashboard, Agent Run, SQL Tool, Hybrid RAG, Traces, Evals
-sample_data/policies/ RAG policy docs
-evals/                SQL/RAG eval cases
-docs/                 project overview and demo docs
-docker-compose.yml
-```
-
-## Current Scope
-
-Implemented:
-
-- Backend API
-- Real data ingestion
-- Dashboard metrics
-- Agent planner and tool registry
-- Safe SQL tool with optional LLM planner and backend safety validation
-- Hybrid RAG with chunk embeddings, hybrid retrieval, grounded generation, citations, and refusal
-- Execution traces
-- Evaluation runner
-- React UI split into API/types/components/pages
-- Docker Compose
-- Tests and README
-
-Intentional MVP boundaries:
-
-- Default no-key mode uses mock chat generation and local hash embeddings; configure external providers for production-like LLM and embedding behavior.
-- Vector search is database-backed JSON plus application-side cosine scoring, not pgvector yet.
-- SQL execution is read-only and intentionally narrow.
-- Production auth, queue workers, cloud deployment, document upload, pgvector, and learned reranking are future extensions.
+- No production authentication yet.
+- Public admin-like endpoints are acceptable for this demo, but should be protected before real use.
+- Vector storage uses JSON vectors and application-side cosine scoring; larger corpora should use pgvector or a vector database.
+- Render free tier can sleep.
+- The system can stay fresh with NYC Open Data, but cannot exceed the upstream update cadence.

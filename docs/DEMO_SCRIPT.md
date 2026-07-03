@@ -30,6 +30,16 @@ Explain:
 - Borough distribution
 - Agency workload
 - Daily trend
+- Latest request timestamp
+- Last successful sync timestamp
+
+Then click **Sync latest**.
+
+Explain:
+
+- The backend checks the latest `created_date` already stored.
+- It looks back over the recent window and calls the official NYC 311 API again.
+- It upserts by `unique_key`, so new requests are inserted and recent status changes are updated.
 
 ## 4. Ask The Safe SQL Agent
 
@@ -68,19 +78,20 @@ Explain:
 
 ## 6. Ask The Hybrid RAG Assistant
 
-Click **Reindex docs**, then ask:
+Click **Refresh official docs**, then ask:
 
 ```text
-What SQL statements is the agent allowed to execute?
+How do I check a NYC311 service request status?
 ```
 
 Explain:
 
-- The RAG assistant chunks local policy documents.
+- The RAG assistant indexes local project docs plus official NYC311 and NYC Open Data sources.
 - It generates chunk embeddings and uses hybrid vector/keyword retrieval.
 - It gates weak evidence before calling the chat provider.
 - It returns citations with hybrid score, vector score, lexical score, and matched terms.
 - If evidence is weak, it refuses instead of guessing.
+- Optional PDF sources may be skipped if the city PDF host blocks backend clients; those warnings are returned by the API.
 
 ## 7. Show Traces
 

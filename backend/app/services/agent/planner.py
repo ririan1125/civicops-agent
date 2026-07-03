@@ -25,12 +25,17 @@ SQL_KEYWORDS = [
     "open",
     "closed",
     "workload",
+    "how many",
+    "ranking",
+    "distribution",
     "多少",
     "最多",
     "排名",
     "趋势",
     "区域",
     "部门",
+    "投诉",
+    "数量",
 ]
 
 RAG_KEYWORDS = [
@@ -42,43 +47,72 @@ RAG_KEYWORDS = [
     "document",
     "allowed",
     "rule",
+    "faq",
+    "service request",
+    "nyc311",
+    "311 portal",
+    "open data",
+    "metadata",
+    "schema",
+    "technical standard",
+    "governance",
+    "source",
+    "how do i",
+    "how to",
+    "meaning",
+    "define",
     "政策",
     "流程",
     "规定",
     "依据",
     "引用",
     "允许",
+    "文档",
+    "怎么查",
+    "怎么提交",
+    "服务请求",
+    "元数据",
+    "字段定义",
+    "数据治理",
 ]
+
+
+def _rag_plan() -> AgentPlan:
+    return AgentPlan(
+        route="rag",
+        selected_tool="rag_policy_assistant",
+        reason="The question asks for policy/process/source knowledge that needs document evidence.",
+        steps=[
+            "Identify the question as a document-grounded policy/process/source request.",
+            "Retrieve relevant chunks with hybrid search.",
+            "Generate a grounded answer with citations or refuse weak evidence.",
+        ],
+        confidence=0.76,
+        planner_provider="heuristic",
+    )
+
+
+def _sql_plan() -> AgentPlan:
+    return AgentPlan(
+        route="sql",
+        selected_tool="safe_sql_analysis",
+        reason="The question asks for structured metrics or database aggregation.",
+        steps=[
+            "Identify the question as a structured-data analytics request.",
+            "Use the safe SQL tool with the service_requests schema.",
+            "Validate that generated SQL is read-only before execution.",
+        ],
+        confidence=0.78,
+        planner_provider="heuristic",
+    )
 
 
 def _heuristic_plan(question: str) -> AgentPlan:
     q = question.lower()
-    if any(keyword in q for keyword in SQL_KEYWORDS):
-        return AgentPlan(
-            route="sql",
-            selected_tool="safe_sql_analysis",
-            reason="The question asks for structured metrics or database aggregation.",
-            steps=[
-                "Identify the question as a structured-data analytics request.",
-                "Use the safe SQL tool with the service_requests schema.",
-                "Validate that generated SQL is read-only before execution.",
-            ],
-            confidence=0.78,
-            planner_provider="heuristic",
-        )
     if any(keyword in q for keyword in RAG_KEYWORDS):
-        return AgentPlan(
-            route="rag",
-            selected_tool="rag_policy_assistant",
-            reason="The question asks for policy/process knowledge that needs document evidence.",
-            steps=[
-                "Identify the question as a document-grounded policy/process request.",
-                "Retrieve relevant policy chunks with hybrid search.",
-                "Generate a grounded answer with citations or refuse weak evidence.",
-            ],
-            confidence=0.76,
-            planner_provider="heuristic",
-        )
+        return _rag_plan()
+    if any(keyword in q for keyword in SQL_KEYWORDS):
+        return _sql_plan()
     return AgentPlan(
         route="clarify",
         selected_tool="clarification",
@@ -129,7 +163,7 @@ def plan_agent(question: str) -> AgentPlan:
                 "tools": tool_manifest(),
                 "selection_rules": [
                     "Use safe_sql_analysis for counts, rankings, trends, workload, status, and database metrics.",
-                    "Use rag_policy_assistant for policy, process, rule, governance, citation, or document-evidence questions.",
+                    "Use rag_policy_assistant for policy, process, source, governance, citation, FAQ, or document-evidence questions.",
                     "Use clarification when the source or intent is ambiguous.",
                 ],
             },

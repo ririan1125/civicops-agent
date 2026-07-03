@@ -20,11 +20,19 @@ def service_requests_schema_context() -> str:
     )
 
 
+def _contains_any(question: str, tokens: list[str]) -> bool:
+    return any(token in question for token in tokens)
+
+
 def _template_plan(question: str) -> PlannedSQL:
     q = question.lower()
-    assumptions = ["Using table service_requests.", "Only read-only SELECT SQL is generated.", "Planner provider: deterministic template fallback."]
+    assumptions = [
+        "Using table service_requests.",
+        "Only read-only SELECT SQL is generated.",
+        "Planner provider: deterministic template fallback.",
+    ]
 
-    if any(token in q for token in ["top complaint", "most common", "最多", "高频", "投诉类型排名"]):
+    if _contains_any(q, ["top complaint", "most common", "complaint type", "最多", "高频", "投诉类型", "投诉排名"]):
         return PlannedSQL(
             sql=(
                 "SELECT complaint_type, COUNT(*) AS request_count "
@@ -38,7 +46,7 @@ def _template_plan(question: str) -> PlannedSQL:
             assumptions=assumptions + ["Ranking complaint_type by count."],
         )
 
-    if any(token in q for token in ["borough", "区域", "行政区", "区分布"]):
+    if _contains_any(q, ["borough", "行政区", "区域", "区分布", "哪个区"]):
         return PlannedSQL(
             sql=(
                 "SELECT borough, COUNT(*) AS request_count "
@@ -51,7 +59,7 @@ def _template_plan(question: str) -> PlannedSQL:
             assumptions=assumptions + ["Grouping by borough."],
         )
 
-    if any(token in q for token in ["agency", "部门", "机构", "workload"]):
+    if _contains_any(q, ["agency", "workload", "部门", "机构", "处理机构", "工作量"]):
         return PlannedSQL(
             sql=(
                 "SELECT agency, COUNT(*) AS request_count "
@@ -65,7 +73,7 @@ def _template_plan(question: str) -> PlannedSQL:
             assumptions=assumptions + ["Using agency as workload owner."],
         )
 
-    if any(token in q for token in ["open", "未关闭", "未完成", "open cases"]):
+    if _contains_any(q, ["open", "closed", "status", "未关闭", "未完成", "已关闭", "状态"]):
         return PlannedSQL(
             sql=(
                 "SELECT status, COUNT(*) AS request_count "
@@ -77,7 +85,7 @@ def _template_plan(question: str) -> PlannedSQL:
             assumptions=assumptions + ["Status is used to estimate open versus closed work."],
         )
 
-    if any(token in q for token in ["resolution", "解决时间", "处理时间", "average time", "avg time"]):
+    if _contains_any(q, ["resolution", "average time", "avg time", "解决时间", "处理时间", "平均耗时"]):
         return PlannedSQL(
             sql=(
                 "SELECT complaint_type, COUNT(*) AS closed_count "
@@ -92,7 +100,7 @@ def _template_plan(question: str) -> PlannedSQL:
             + ["SQLite/PostgreSQL timestamp arithmetic differs, so API computes average resolution separately."],
         )
 
-    if any(token in q for token in ["trend", "趋势", "daily", "每天", "recent"]):
+    if _contains_any(q, ["trend", "daily", "recent", "趋势", "每天", "最近"]):
         return PlannedSQL(
             sql=(
                 "SELECT DATE(created_date) AS request_day, COUNT(*) AS request_count "
@@ -106,7 +114,7 @@ def _template_plan(question: str) -> PlannedSQL:
             assumptions=assumptions + ["Daily trend uses created_date."],
         )
 
-    if any(token in q for token in ["count", "total", "how many", "number of", "多少", "总数"]):
+    if _contains_any(q, ["count", "total", "how many", "number of", "多少", "总数", "数量"]):
         return PlannedSQL(
             sql="SELECT COUNT(*) AS total_requests FROM service_requests",
             confidence=0.88,

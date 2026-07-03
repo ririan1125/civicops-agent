@@ -28,5 +28,6 @@ generate_obsidian*.cjs
 
 # Local research/study documents are not part of the public project repository.
 docs/*.md
+!docs/ARCHITECTURE.md
 !docs/DEMO_SCRIPT.md
 !docs/PROJECT_OVERVIEW_CN.md

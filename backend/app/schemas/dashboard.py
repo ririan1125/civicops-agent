@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -17,6 +19,8 @@ class DashboardSummary(BaseModel):
     open_requests: int
     closed_requests: int
     average_resolution_hours: float | None
+    latest_created_date: datetime | None = None
+    latest_ingestion_finished_at: datetime | None = None
     top_complaints: list[BreakdownItem]
     borough_distribution: list[BreakdownItem]
     agency_workload: list[BreakdownItem]

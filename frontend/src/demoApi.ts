@@ -45,6 +45,8 @@ const dashboardSummary = {
   open_requests: 842,
   closed_requests: 2158,
   average_resolution_hours: 37.4,
+  latest_created_date: "2026-07-03T18:30:00",
+  latest_ingestion_finished_at: now(),
   top_complaints: [
     { label: "Noise - Residential", value: 612 },
     { label: "Illegal Parking", value: 438 },
@@ -77,6 +79,7 @@ const ragCitations = [
     document_title: "Civicops Agent Operating Policy",
     chunk_id: 1,
     heading: "Safe SQL",
+    source_url: null,
     snippet:
       "The CivicOps Agent may execute read-only SELECT queries for analysis. It must not execute INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, REVOKE, or other destructive database statements.",
     score: 0.42,
@@ -88,6 +91,7 @@ const ragCitations = [
     document_title: "Civicops Agent Operating Policy",
     chunk_id: 2,
     heading: "Tool Calling",
+    source_url: null,
     snippet:
       "The language model or router can select tools, but the backend owns tool execution. The backend validates tool inputs, enforces SQL safety, records execution traces, and returns structured outputs.",
     score: 0.34,
@@ -157,6 +161,23 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
       finished_at: now()
     } as T;
   }
+  if (path === "/ingestion/sync-latest" && method === "POST") {
+    return {
+      run_id: 4,
+      source: "nyc_311_demo_snapshot",
+      requested_limit: body.limit || 5000,
+      fetched_count: 5000,
+      inserted_count: 140,
+      updated_count: 4860,
+      status: "success",
+      error_message: null,
+      started_at: now(),
+      finished_at: now(),
+      sync_mode: "latest_with_lookback",
+      previous_latest_created_date: dashboardSummary.latest_created_date,
+      sync_start_date: "2026-06-26"
+    } as T;
+  }
   if (path === "/agent/sql" && method === "POST") {
     return sqlResponse(body.question || "What are the top complaint types?") as T;
   }
@@ -177,7 +198,15 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
     } as T;
   }
   if (path === "/rag/reindex" && method === "POST") {
-    return { documents_indexed: 2, chunks_indexed: 8, embedding_provider: "local_hash", embedding_model: "local-hash-384" } as T;
+    return {
+      documents_indexed: 11,
+      chunks_indexed: 62,
+      local_sources_indexed: 4,
+      remote_sources_indexed: 7,
+      embedding_provider: "local_hash",
+      embedding_model: "local-hash-384",
+      warnings: []
+    } as T;
   }
   if (path === "/rag/ask" && method === "POST") {
     return ragResponse(body.question || "What SQL statements is the agent allowed to execute?") as T;

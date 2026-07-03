@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 COPY backend/app /app/backend/app
 COPY sample_data /app/sample_data
 COPY evals /app/evals
+COPY README.md /app/README.md
+COPY docs /app/docs
 
 WORKDIR /app/backend
 

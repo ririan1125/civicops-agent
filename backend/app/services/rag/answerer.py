@@ -2,6 +2,7 @@ import re
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models import PolicyChunk
 from app.schemas.rag import Citation, RAGAskResponse
 from app.services.llm.providers import complete_chat
@@ -18,10 +19,12 @@ def _snippet(text: str, max_chars: int = 260) -> str:
 
 def _citation(item: RetrievedChunk) -> Citation:
     document = item.chunk.document
+    source_url = document.source_path if document.source_path and document.source_path.startswith("http") else None
     return Citation(
         document_title=document.title,
         chunk_id=item.chunk.id,
         heading=item.chunk.heading,
+        source_url=source_url,
         snippet=_snippet(item.chunk.content),
         score=item.score,
         lexical_score=item.lexical_score,
@@ -41,7 +44,7 @@ def _compose_answer(question: str, retrieved: list[RetrievedChunk]) -> tuple[str
         system_prompt=(
             "You are a civic operations assistant. Answer only from the provided evidence. "
             "If evidence is insufficient, say you cannot answer confidently from the indexed documents. "
-            "Keep the answer concise and mention the supporting chunk ids when useful."
+            "Keep the answer concise and mention the supporting chunk ids or source titles when useful."
         ),
         user_prompt=f"Question: {question}\n\nEvidence:\n\n" + "\n\n".join(evidence_blocks),
     )
@@ -59,7 +62,7 @@ def _has_sufficient_evidence(retrieved: list[RetrievedChunk]) -> bool:
 
 def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskResponse:
     if db.query(PolicyChunk).count() == 0:
-        index_policy_documents(db)
+        index_policy_documents(db, include_remote=get_settings().rag_include_remote_sources)
 
     retrieved = retrieve_chunks(db, question, top_k=top_k)
     if not _has_sufficient_evidence(retrieved):

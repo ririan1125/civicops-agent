@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
-from app.db.models import ServiceRequest
+from app.db.models import IngestionRun, ServiceRequest
 from app.schemas.dashboard import BreakdownItem, DashboardSummary
 
 
@@ -69,6 +69,8 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
         open_requests=open_count,
         closed_requests=closed,
         average_resolution_hours=_average_resolution_hours(db),
+        latest_created_date=db.query(func.max(ServiceRequest.created_date)).scalar(),
+        latest_ingestion_finished_at=db.query(func.max(IngestionRun.finished_at)).filter(IngestionRun.status == "success").scalar(),
         top_complaints=_breakdown(db, ServiceRequest.complaint_type),
         borough_distribution=_breakdown(db, ServiceRequest.borough),
         agency_workload=_breakdown(db, ServiceRequest.agency),

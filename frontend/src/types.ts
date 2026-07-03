@@ -5,6 +5,8 @@ export type DashboardSummary = {
   open_requests: number;
   closed_requests: number;
   average_resolution_hours: number | null;
+  latest_created_date: string | null;
+  latest_ingestion_finished_at: string | null;
   top_complaints: BreakdownItem[];
   borough_distribution: BreakdownItem[];
   agency_workload: BreakdownItem[];
@@ -24,6 +26,7 @@ export type Citation = {
   document_title: string;
   chunk_id: number;
   heading: string | null;
+  source_url?: string | null;
   snippet: string;
   score: number;
   lexical_score?: number | null;

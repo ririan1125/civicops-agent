@@ -32,4 +32,5 @@ def test_dashboard_summary_counts_records(db_session) -> None:
     assert summary.total_requests == 2
     assert summary.closed_requests == 1
     assert summary.open_requests == 1
+    assert summary.latest_created_date == datetime(2026, 7, 1)
     assert summary.top_complaints[0].value == 1

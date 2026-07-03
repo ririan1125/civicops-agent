@@ -1,5 +1,5 @@
 import React from "react";
-import { FileSearch } from "lucide-react";
+import { FileSearch, RefreshCcw } from "lucide-react";
 import { api } from "../api";
 import type { RAGResponse } from "../types";
 
@@ -7,13 +7,24 @@ export function RAGAssistant() {
   const [question, setQuestion] = React.useState("What SQL statements is the agent allowed to execute?");
   const [result, setResult] = React.useState<RAGResponse | null>(null);
   const [status, setStatus] = React.useState("");
+  const [warnings, setWarnings] = React.useState<string[]>([]);
 
   async function reindex() {
-    const response = await api<{ documents_indexed: number; chunks_indexed: number; embedding_provider?: string; embedding_model?: string }>("/rag/reindex", {
-      method: "POST"
+    const response = await api<{
+      documents_indexed: number;
+      chunks_indexed: number;
+      local_sources_indexed: number;
+      remote_sources_indexed: number;
+      embedding_provider?: string;
+      embedding_model?: string;
+      warnings: string[];
+    }>("/rag/reindex", {
+      method: "POST",
+      body: JSON.stringify({ include_remote: true })
     });
+    setWarnings(response.warnings || []);
     setStatus(
-      `Indexed ${response.documents_indexed} documents and ${response.chunks_indexed} chunks with ${response.embedding_provider || "embedding"} / ${response.embedding_model || "model"}.`
+      `Indexed ${response.documents_indexed} documents (${response.local_sources_indexed} local, ${response.remote_sources_indexed} remote) and ${response.chunks_indexed} chunks with ${response.embedding_provider || "embedding"} / ${response.embedding_model || "model"}.`
     );
   }
 
@@ -32,9 +43,16 @@ export function RAGAssistant() {
         <button onClick={ask}>
           <FileSearch size={16} /> Ask
         </button>
-        <button className="secondary" onClick={reindex}>Reindex docs</button>
+        <button className="secondary" onClick={reindex}>
+          <RefreshCcw size={16} /> Refresh official docs
+        </button>
       </div>
       {status ? <div className="status">{status}</div> : null}
+      {warnings.length ? (
+        <div className="status">
+          {warnings.slice(0, 3).map((warning) => <div key={warning}>{warning}</div>)}
+        </div>
+      ) : null}
       {result ? (
         <section className="panel">
           <h2>{result.refused ? "Refused" : "Answer"}</h2>
@@ -52,6 +70,7 @@ export function RAGAssistant() {
                 <span>
                   {citation.heading || "Untitled section"} · hybrid {citation.score} · vector {citation.vector_score ?? "n/a"} · lexical {citation.lexical_score ?? "n/a"}
                 </span>
+                {citation.source_url ? <a href={citation.source_url} target="_blank" rel="noreferrer">Open source</a> : null}
                 <p>{citation.snippet}</p>
                 {citation.matched_terms.length ? <small>Matched terms: {citation.matched_terms.join(", ")}</small> : null}
               </article>

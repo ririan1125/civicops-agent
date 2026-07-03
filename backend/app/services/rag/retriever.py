@@ -32,11 +32,18 @@ STOPWORDS = {
     "what",
     "how",
     "should",
+    "i",
+    "me",
+    "my",
     "我",
     "的",
     "是",
     "吗",
+    "么",
     "什么",
+    "怎么",
+    "如何",
+    "一下",
 }
 
 
@@ -65,9 +72,9 @@ def _heading_bonus(question_tokens: set[str], heading: str | None) -> float:
 
 
 def _phrase_bonus(question: str, content: str) -> float:
-    normalized_question = " ".join(re.findall(r"[a-zA-Z0-9_]+", question.lower()))
-    normalized_content = " ".join(re.findall(r"[a-zA-Z0-9_]+", content.lower()))
-    if len(normalized_question) >= 8 and normalized_question in normalized_content:
+    normalized_question = "".join(re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]", question.lower()))
+    normalized_content = "".join(re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]", content.lower()))
+    if len(normalized_question) >= 4 and normalized_question in normalized_content:
         return 0.08
     return 0.0
 

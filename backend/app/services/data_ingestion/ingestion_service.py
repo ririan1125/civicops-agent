@@ -1,8 +1,12 @@
+from datetime import timedelta
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.time import utc_now
 from app.db.models import IngestionRun, ServiceRequest
-from app.schemas.ingestion import IngestionRequest, IngestionResponse
+from app.schemas.ingestion import IngestionRequest, IngestionResponse, IngestionSyncRequest, IngestionSyncResponse
 from app.services.data_ingestion.cleaner import clean_311_record
 from app.services.data_ingestion.nyc_311_client import fetch_311_requests
 
@@ -74,4 +78,31 @@ def run_ingestion(db: Session, request: IngestionRequest) -> IngestionResponse:
         error_message=run.error_message,
         started_at=run.started_at,
         finished_at=run.finished_at,
+    )
+
+
+def run_latest_sync(db: Session, request: IngestionSyncRequest | None = None) -> IngestionSyncResponse:
+    settings = get_settings()
+    request = request or IngestionSyncRequest(
+        limit=settings.ingestion_sync_limit,
+        lookback_days=settings.ingestion_sync_lookback_days,
+    )
+    latest_created_date = db.query(func.max(ServiceRequest.created_date)).scalar()
+    sync_start_date = None
+    if latest_created_date:
+        sync_start_date = (latest_created_date - timedelta(days=request.lookback_days)).date()
+
+    response = run_ingestion(
+        db,
+        IngestionRequest(
+            limit=request.limit,
+            offset=0,
+            start_date=sync_start_date,
+            borough=request.borough,
+        ),
+    )
+    return IngestionSyncResponse(
+        **response.model_dump(),
+        previous_latest_created_date=latest_created_date,
+        sync_start_date=sync_start_date,
     )

@@ -4,8 +4,23 @@ from pydantic import BaseModel, Field
 class ReindexResponse(BaseModel):
     documents_indexed: int
     chunks_indexed: int
+    local_sources_indexed: int = 0
+    remote_sources_indexed: int = 0
     embedding_provider: str | None = None
     embedding_model: str | None = None
+    warnings: list[str] = []
+
+
+class ReindexRequest(BaseModel):
+    include_remote: bool = True
+
+
+class RAGSourceInfo(BaseModel):
+    title: str
+    url: str
+    source_type: str
+    required: bool
+    notes: str | None = None
 
 
 class RAGAskRequest(BaseModel):
@@ -17,6 +32,7 @@ class Citation(BaseModel):
     document_title: str
     chunk_id: int
     heading: str | None = None
+    source_url: str | None = None
     snippet: str
     score: float
     lexical_score: float | None = None

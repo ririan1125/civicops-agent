@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 384
     nyc_311_endpoint: str = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
+    rag_include_remote_sources: bool = False
+    rag_remote_timeout_seconds: int = 35
+    ingestion_sync_limit: int = 5000
+    ingestion_sync_lookback_days: int = 7
 
     model_config = SettingsConfigDict(
         env_file=".env",

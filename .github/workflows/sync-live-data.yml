@@ -1,0 +1,28 @@
+name: Sync Live Data
+
+on:
+  schedule:
+    - cron: "20 7 * * *"
+    - cron: "45 7 * * 1"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://civicops-agent-api-ririan1125.onrender.com' }}
+    steps:
+      - name: Sync latest NYC 311 records
+        run: |
+          curl --fail --show-error --retry 3 --retry-delay 15 --max-time 300 \
+            -X POST "${API_BASE_URL}/ingestion/sync-latest" \
+            -H "Content-Type: application/json" \
+            -d '{"limit":5000,"lookback_days":7}'
+
+      - name: Refresh official RAG sources weekly
+        if: github.event.schedule == '45 7 * * 1' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl --fail --show-error --retry 3 --retry-delay 15 --max-time 420 \
+            -X POST "${API_BASE_URL}/rag/reindex" \
+            -H "Content-Type: application/json" \
+            -d '{"include_remote":true}'

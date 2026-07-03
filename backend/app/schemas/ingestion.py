@@ -22,3 +22,15 @@ class IngestionResponse(BaseModel):
     error_message: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class IngestionSyncRequest(BaseModel):
+    limit: int = Field(default=5000, ge=1, le=10000)
+    lookback_days: int = Field(default=7, ge=0, le=90)
+    borough: str | None = None
+
+
+class IngestionSyncResponse(IngestionResponse):
+    sync_mode: str = "latest_with_lookback"
+    previous_latest_created_date: datetime | None = None
+    sync_start_date: date | None = None

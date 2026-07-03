@@ -39,6 +39,14 @@ services:
         value: text-embedding-3-small
       - key: EMBEDDING_DIMENSIONS
         value: 384
+      - key: RAG_INCLUDE_REMOTE_SOURCES
+        value: "true"
+      - key: RAG_REMOTE_TIMEOUT_SECONDS
+        value: 35
+      - key: INGESTION_SYNC_LIMIT
+        value: 5000
+      - key: INGESTION_SYNC_LOOKBACK_DAYS
+        value: 7
 
 databases:
   - name: civicops-agent-db
