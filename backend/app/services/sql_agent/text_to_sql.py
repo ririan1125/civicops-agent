@@ -161,27 +161,30 @@ def _coerce_llm_sql(raw: str) -> PlannedSQL | None:
 
 def plan_sql(question: str) -> PlannedSQL:
     if llm_planning_enabled():
-        raw = optional_deepseek_completion(
-            system_prompt=(
-                "You are a SQL planner. Generate exactly one safe read-only SELECT query. "
-                "Use only the provided schema. Return only valid JSON with keys sql, confidence, assumptions. "
-                "Do not use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, PRAGMA, multiple statements, or comments."
-            ),
-            user_prompt=json.dumps(
-                {
-                    "question": question,
-                    "schema": service_requests_schema_context(),
-                    "rules": [
-                        "Use only table service_requests.",
-                        "Prefer aggregate SQL for counts, rankings, distributions, trends, and workload.",
-                        "Always include LIMIT for row-level listing queries.",
-                    ],
-                },
-                ensure_ascii=False,
-            ),
-        )
-        if raw:
-            planned = _coerce_llm_sql(raw)
-            if planned:
-                return planned
+        try:
+            raw = optional_deepseek_completion(
+                system_prompt=(
+                    "You are a SQL planner. Generate exactly one safe read-only SELECT query. "
+                    "Use only the provided schema. Return only valid JSON with keys sql, confidence, assumptions. "
+                    "Do not use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, PRAGMA, multiple statements, or comments."
+                ),
+                user_prompt=json.dumps(
+                    {
+                        "question": question,
+                        "schema": service_requests_schema_context(),
+                        "rules": [
+                            "Use only table service_requests.",
+                            "Prefer aggregate SQL for counts, rankings, distributions, trends, and workload.",
+                            "Always include LIMIT for row-level listing queries.",
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            if raw:
+                planned = _coerce_llm_sql(raw)
+                if planned:
+                    return planned
+        except Exception:
+            return _template_plan(question)
     return _template_plan(question)

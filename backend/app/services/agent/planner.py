@@ -152,26 +152,29 @@ def plan_agent(question: str) -> AgentPlan:
     if not llm_planning_enabled():
         return _heuristic_plan(question)
 
-    raw = optional_deepseek_completion(
-        system_prompt=(
-            "You are an agent planner for CivicOps Agent. Choose exactly one tool. "
-            "Return only valid JSON with keys: selected_tool, reason, steps, confidence."
-        ),
-        user_prompt=json.dumps(
-            {
-                "question": question,
-                "tools": tool_manifest(),
-                "selection_rules": [
-                    "Use safe_sql_analysis for counts, rankings, trends, workload, status, and database metrics.",
-                    "Use rag_policy_assistant for policy, process, source, governance, citation, FAQ, or document-evidence questions.",
-                    "Use clarification when the source or intent is ambiguous.",
-                ],
-            },
-            ensure_ascii=False,
-        ),
-    )
-    if raw:
-        planned = _coerce_llm_plan(raw)
-        if planned:
-            return planned
+    try:
+        raw = optional_deepseek_completion(
+            system_prompt=(
+                "You are an agent planner for CivicOps Agent. Choose exactly one tool. "
+                "Return only valid JSON with keys: selected_tool, reason, steps, confidence."
+            ),
+            user_prompt=json.dumps(
+                {
+                    "question": question,
+                    "tools": tool_manifest(),
+                    "selection_rules": [
+                        "Use safe_sql_analysis for counts, rankings, trends, workload, status, and database metrics.",
+                        "Use rag_policy_assistant for policy, process, source, governance, citation, FAQ, or document-evidence questions.",
+                        "Use clarification when the source or intent is ambiguous.",
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        )
+        if raw:
+            planned = _coerce_llm_plan(raw)
+            if planned:
+                return planned
+    except Exception:
+        return _heuristic_plan(question)
     return _heuristic_plan(question)
