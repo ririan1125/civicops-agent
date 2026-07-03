@@ -2,6 +2,8 @@
 
 **Urban Service Request Triage & Operations Copilot**
 
+[Public Demo](https://ririan1125.github.io/civicops-agent/) · [API Docs Local](http://localhost:8000/docs)
+
 CivicOps Agent is a full-stack operations copilot for city service request teams. It imports real NYC 311 data, answers operational metric questions with a safe SQL tool, answers policy/process questions with hybrid RAG, and records every tool run for auditability.
 
 CivicOps Agent 是一个基于真实 NYC 311 城市服务请求数据的城市运营助手。它解决的问题是：运营人员需要快速看清投诉趋势、区域分布、部门工作量和处理流程依据，同时系统必须保证 SQL 只读、回答可引用、执行过程可追踪。
@@ -85,6 +87,18 @@ Open:
 - Frontend: http://localhost:3000
 - Backend API docs: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
+
+## Public Demo
+
+The GitHub Pages demo is deployed at:
+
+```text
+https://ririan1125.github.io/civicops-agent/
+```
+
+This public demo runs the React console in `VITE_API_BASE_URL=demo` mode. It uses built-in sample responses so visitors can inspect the UI, Agent planner flow, Hybrid RAG citations, traces, and eval screens without needing access to a backend server.
+
+For real NYC 311 ingestion, PostgreSQL, and live FastAPI execution, run the Docker or local development stack.
 
 ## Docker 快速启动
 

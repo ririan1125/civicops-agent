@@ -15,6 +15,7 @@ dist/
 *.tsbuildinfo
 .coverage
 htmlcov/
+.run-logs/
 *.sqlite
 *.db
 .DS_Store
