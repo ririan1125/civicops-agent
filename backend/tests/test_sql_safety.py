@@ -19,3 +19,12 @@ def test_blocks_multiple_statements() -> None:
 
 def test_enforce_limit_adds_default_limit() -> None:
     assert enforce_limit("SELECT * FROM service_requests").endswith("LIMIT 100")
+
+
+def test_limit_inside_comment_does_not_disable_default_limit() -> None:
+    sql = "SELECT * FROM service_requests -- LIMIT 1"
+    assert enforce_limit(sql).endswith("LIMIT 100")
+
+
+def test_destructive_statement_inside_block_comment_is_ignored() -> None:
+    assert_safe_select("/* DROP TABLE service_requests; */ SELECT COUNT(*) FROM service_requests")

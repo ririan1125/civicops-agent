@@ -1,7 +1,6 @@
-from datetime import datetime
-
 from sqlalchemy.orm import Session
 
+from app.core.time import utc_now
 from app.db.models import IngestionRun, ServiceRequest
 from app.schemas.ingestion import IngestionRequest, IngestionResponse
 from app.services.data_ingestion.cleaner import clean_311_record
@@ -19,7 +18,7 @@ def _upsert_service_request(db: Session, cleaned: dict) -> str:
 
 
 def run_ingestion(db: Session, request: IngestionRequest) -> IngestionResponse:
-    started_at = datetime.utcnow()
+    started_at = utc_now()
     run = IngestionRun(
         requested_limit=request.limit,
         fetched_count=0,
@@ -54,13 +53,13 @@ def run_ingestion(db: Session, request: IngestionRequest) -> IngestionResponse:
         run.inserted_count = inserted_count
         run.updated_count = updated_count
         run.status = "success"
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utc_now()
         db.commit()
     except Exception as exc:
         db.rollback()
         run.status = "failed"
         run.error_message = str(exc)
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utc_now()
         db.add(run)
         db.commit()
 

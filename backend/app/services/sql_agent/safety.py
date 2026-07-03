@@ -18,6 +18,12 @@ class SQLSafetyError(ValueError):
     pass
 
 
+def strip_sql_comments(sql: str) -> str:
+    without_block_comments = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
+    without_line_comments = re.sub(r"--[^\n\r]*", " ", without_block_comments)
+    return without_line_comments
+
+
 def _has_multiple_statements(sql: str) -> bool:
     stripped = sql.strip()
     if ";" not in stripped:
@@ -26,7 +32,7 @@ def _has_multiple_statements(sql: str) -> bool:
 
 
 def assert_safe_select(sql: str) -> None:
-    stripped = sql.strip()
+    stripped = strip_sql_comments(sql).strip()
     if not stripped:
         raise SQLSafetyError("SQL is empty.")
     if _has_multiple_statements(stripped):
@@ -43,7 +49,7 @@ def assert_safe_select(sql: str) -> None:
 
 
 def enforce_limit(sql: str, limit: int = 100) -> str:
-    stripped = sql.strip().rstrip(";")
+    stripped = strip_sql_comments(sql).strip().rstrip(";")
     if re.search(r"\blimit\s+\d+\b", stripped, re.IGNORECASE):
         return stripped
     return f"{stripped} LIMIT {limit}"

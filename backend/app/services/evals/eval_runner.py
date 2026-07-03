@@ -46,7 +46,10 @@ def run_rag_eval(db: Session) -> tuple[EvalMetric, list[dict]]:
         response = answer_rag_question(db, case["question"], top_k=4)
         expected_refusal = bool(case.get("should_refuse", False))
         has_citation = len(response.citations) > 0
-        ok = response.refused == expected_refusal and (expected_refusal or has_citation)
+        expected_terms = [str(term).lower() for term in case.get("expected_terms", [])]
+        retrieved_text = " ".join(citation.snippet.lower() for citation in response.citations)
+        terms_hit = all(term in retrieved_text for term in expected_terms)
+        ok = response.refused == expected_refusal and (expected_refusal or (has_citation and terms_hit))
         passed += int(ok)
         if not ok:
             failures.append(
@@ -55,6 +58,7 @@ def run_rag_eval(db: Session) -> tuple[EvalMetric, list[dict]]:
                     "case": case,
                     "observed_refused": response.refused,
                     "citation_count": len(response.citations),
+                    "terms_hit": terms_hit,
                 }
             )
     total = len(cases)

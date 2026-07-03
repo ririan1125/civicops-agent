@@ -1,4 +1,8 @@
+import json
 from dataclasses import dataclass
+
+from app.services.llm.providers import llm_planning_enabled, optional_deepseek_completion
+from app.services.sql_agent.safety import SQLSafetyError, assert_safe_select
 
 
 @dataclass
@@ -16,9 +20,9 @@ def service_requests_schema_context() -> str:
     )
 
 
-def plan_sql(question: str) -> PlannedSQL:
+def _template_plan(question: str) -> PlannedSQL:
     q = question.lower()
-    assumptions = ["Using table service_requests.", "Only read-only SELECT SQL is generated."]
+    assumptions = ["Using table service_requests.", "Only read-only SELECT SQL is generated.", "Planner provider: deterministic template fallback."]
 
     if any(token in q for token in ["top complaint", "most common", "最多", "高频", "投诉类型排名"]):
         return PlannedSQL(
@@ -119,3 +123,57 @@ def plan_sql(question: str) -> PlannedSQL:
         confidence=0.55,
         assumptions=assumptions + ["Question is broad; returning recent service requests as a safe fallback."],
     )
+
+
+def _coerce_llm_sql(raw: str) -> PlannedSQL | None:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    sql = str(payload.get("sql") or "").strip()
+    if not sql:
+        return None
+    try:
+        assert_safe_select(sql)
+    except SQLSafetyError:
+        return None
+    assumptions = payload.get("assumptions", [])
+    if not isinstance(assumptions, list):
+        assumptions = []
+    try:
+        confidence = float(payload.get("confidence", 0.68))
+    except (TypeError, ValueError):
+        confidence = 0.68
+    return PlannedSQL(
+        sql=sql,
+        confidence=max(0.0, min(0.95, confidence)),
+        assumptions=["Planner provider: deepseek schema-aware SQL planner."] + [str(item) for item in assumptions[:6]],
+    )
+
+
+def plan_sql(question: str) -> PlannedSQL:
+    if llm_planning_enabled():
+        raw = optional_deepseek_completion(
+            system_prompt=(
+                "You are a SQL planner. Generate exactly one safe read-only SELECT query. "
+                "Use only the provided schema. Return only valid JSON with keys sql, confidence, assumptions. "
+                "Do not use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, PRAGMA, multiple statements, or comments."
+            ),
+            user_prompt=json.dumps(
+                {
+                    "question": question,
+                    "schema": service_requests_schema_context(),
+                    "rules": [
+                        "Use only table service_requests.",
+                        "Prefer aggregate SQL for counts, rankings, distributions, trends, and workload.",
+                        "Always include LIMIT for row-level listing queries.",
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        )
+        if raw:
+            planned = _coerce_llm_sql(raw)
+            if planned:
+                return planned
+    return _template_plan(question)

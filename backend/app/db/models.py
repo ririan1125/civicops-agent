@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.core.time import utc_now
 
 
 class ServiceRequest(Base):
@@ -43,7 +44,7 @@ class IngestionRun(Base):
     updated_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(64), default="success")
     error_message: Mapped[str | None] = mapped_column(Text)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utc_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
 
 
@@ -53,7 +54,7 @@ class PolicyDocument(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(255), unique=True)
     source_path: Mapped[str | None] = mapped_column(String(512))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utc_now)
 
     chunks: Mapped[list["PolicyChunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
 
@@ -69,6 +70,24 @@ class PolicyChunk(Base):
     token_count: Mapped[int] = mapped_column(Integer, default=0)
 
     document: Mapped[PolicyDocument] = relationship(back_populates="chunks")
+    embedding: Mapped["PolicyChunkEmbedding"] = relationship(
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class PolicyChunkEmbedding(Base):
+    __tablename__ = "policy_chunk_embeddings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    chunk_id: Mapped[int] = mapped_column(ForeignKey("policy_chunks.id", ondelete="CASCADE"), unique=True, index=True)
+    provider: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(128))
+    dimensions: Mapped[int] = mapped_column(Integer)
+    vector: Mapped[list[float]] = mapped_column(JSON)
+
+    chunk: Mapped[PolicyChunk] = relationship(back_populates="embedding")
 
 
 class AgentTrace(Base):
@@ -83,4 +102,4 @@ class AgentTrace(Base):
     status: Mapped[str] = mapped_column(String(64), index=True)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utc_now, index=True)

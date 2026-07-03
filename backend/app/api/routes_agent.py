@@ -60,28 +60,54 @@ def route_and_answer(request: AgentRouteRequest, db: Session = Depends(get_sessi
     decision = route_question(request.question)
     if decision.route == "sql":
         sql_response = ask_sql_agent(SQLQuestionRequest(question=request.question), db)
-        return AgentRouteResponse(route="sql", reason=decision.reason, response=sql_response.model_dump(), trace_id=sql_response.trace_id)
+        return AgentRouteResponse(
+            route="sql",
+            reason=decision.reason,
+            response=sql_response.model_dump(),
+            selected_tool=decision.selected_tool,
+            planner_provider=decision.planner_provider,
+            plan_steps=decision.steps,
+            confidence=decision.confidence,
+            trace_id=sql_response.trace_id,
+        )
     if decision.route == "rag":
         rag_response = answer_rag_question(db, request.question)
         trace = record_trace(
             db,
             user_query=request.question,
             route="rag",
-            selected_tool="rag_policy_assistant",
-            tool_input={"question": request.question},
+            selected_tool=decision.selected_tool,
+            tool_input={
+                "question": request.question,
+                "planner_provider": decision.planner_provider,
+                "plan_steps": decision.steps,
+            },
             tool_output=rag_response.model_dump(),
             status="refused" if rag_response.refused else "success",
             latency_ms=0,
         )
         rag_response.trace_id = trace.id
-        return AgentRouteResponse(route="rag", reason=decision.reason, response=rag_response.model_dump(), trace_id=trace.id)
+        return AgentRouteResponse(
+            route="rag",
+            reason=decision.reason,
+            response=rag_response.model_dump(),
+            selected_tool=decision.selected_tool,
+            planner_provider=decision.planner_provider,
+            plan_steps=decision.steps,
+            confidence=decision.confidence,
+            trace_id=trace.id,
+        )
 
     trace = record_trace(
         db,
         user_query=request.question,
         route="clarify",
-        selected_tool="clarification",
-        tool_input={"question": request.question},
+        selected_tool=decision.selected_tool,
+        tool_input={
+            "question": request.question,
+            "planner_provider": decision.planner_provider,
+            "plan_steps": decision.steps,
+        },
         tool_output={"message": "Please clarify whether you need a metric from the database or an answer from policy documents."},
         status="needs_clarification",
         latency_ms=0,
@@ -90,5 +116,9 @@ def route_and_answer(request: AgentRouteRequest, db: Session = Depends(get_sessi
         route="clarify",
         reason=decision.reason,
         response={"message": "Please clarify whether you need SQL metrics or RAG policy evidence."},
+        selected_tool=decision.selected_tool,
+        planner_provider=decision.planner_provider,
+        plan_steps=decision.steps,
+        confidence=decision.confidence,
         trace_id=trace.id,
     )

@@ -224,6 +224,27 @@ textarea {
   padding: 18px;
 }
 
+.metadata-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 14px 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5edf4;
+  border-radius: 8px;
+}
+
+.metadata-grid span {
+  color: #667487;
+}
+
+.plan-list {
+  margin: 12px 0;
+  padding-left: 22px;
+  line-height: 1.5;
+}
+
 .bars {
   display: grid;
   gap: 12px;
@@ -312,6 +333,10 @@ th {
   color: #667487;
 }
 
+.citation small {
+  color: #667487;
+}
+
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;
@@ -324,7 +349,7 @@ th {
   }
 
   nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   nav button {

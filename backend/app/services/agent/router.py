@@ -1,10 +1,16 @@
 from dataclasses import dataclass
 
+from app.services.agent.planner import plan_agent
+
 
 @dataclass
 class RouteDecision:
     route: str
     reason: str
+    selected_tool: str
+    steps: list[str]
+    confidence: float
+    planner_provider: str
 
 
 SQL_KEYWORDS = [
@@ -40,9 +46,12 @@ RAG_KEYWORDS = [
 
 
 def route_question(question: str) -> RouteDecision:
-    q = question.lower()
-    if any(keyword in q for keyword in SQL_KEYWORDS):
-        return RouteDecision(route="sql", reason="Question asks for structured metrics or database aggregation.")
-    if any(keyword in q for keyword in RAG_KEYWORDS):
-        return RouteDecision(route="rag", reason="Question asks for policy/process knowledge that needs document evidence.")
-    return RouteDecision(route="clarify", reason="Question is ambiguous; ask the user whether they need metrics or policy evidence.")
+    plan = plan_agent(question)
+    return RouteDecision(
+        route=plan.route,
+        reason=plan.reason,
+        selected_tool=plan.selected_tool,
+        steps=plan.steps,
+        confidence=plan.confidence,
+        planner_provider=plan.planner_provider,
+    )

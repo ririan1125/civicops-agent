@@ -29,4 +29,8 @@ class AgentRouteResponse(BaseModel):
     route: str
     reason: str
     response: dict
+    selected_tool: str | None = None
+    planner_provider: str = "heuristic"
+    plan_steps: list[str] = []
+    confidence: float | None = None
     trace_id: int | None = None

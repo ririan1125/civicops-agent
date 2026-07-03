@@ -2,17 +2,18 @@
 
 **Urban Service Request Triage & Operations Copilot**
 
-CivicOps Agent is a full-stack operations copilot for exploring, analyzing, and auditing city service request workflows with real public data.
+CivicOps Agent is a full-stack operations copilot for city service request teams. It imports real NYC 311 data, answers operational metric questions with a safe SQL tool, answers policy/process questions with hybrid RAG, and records every tool run for auditability.
 
-CivicOps Agent 是一个基于真实 NYC 311 城市服务请求数据的城市运营助手。项目重点是完整工程闭环：真实数据接入、指标分析、安全问数、RAG 文档问答、执行追踪和可复现部署。
+CivicOps Agent 是一个基于真实 NYC 311 城市服务请求数据的城市运营助手。它解决的问题是：运营人员需要快速看清投诉趋势、区域分布、部门工作量和处理流程依据，同时系统必须保证 SQL 只读、回答可引用、执行过程可追踪。
 
 ## What It Does
 
 - Imports real NYC 311 service request data from the official NYC Open Data API.
 - Cleans and stores records in PostgreSQL.
 - Shows operations dashboard metrics in React.
-- Answers natural-language data questions through a safe read-only SQL agent.
-- Answers policy/process questions through a local RAG assistant with citations.
+- Plans and executes natural-language metric questions through a read-only SQL tool.
+- Routes user questions through an agent planner that selects SQL, RAG, or clarification.
+- Answers policy/process questions through hybrid vector/keyword RAG with citations.
 - Records execution traces for SQL/RAG/tool actions.
 - Runs basic evaluation suites for SQL safety and RAG citation/refusal behavior.
 - Ships with Docker Compose for a reproducible demo.
@@ -22,9 +23,10 @@ CivicOps Agent 是一个基于真实 NYC 311 城市服务请求数据的城市�
 - 从官方 NYC Open Data API 接入真实 NYC 311 服务请求数据。
 - 清洗数据并写入 PostgreSQL。
 - 用 React 展示城市运营 dashboard。
-- 支持自然语言问数，并生成只读 SQL。
+- 用 Agent planner 判断问题应该走 SQL、RAG，还是需要澄清。
+- 支持自然语言问数，并通过安全 SQL 工具执行只读查询。
 - 用 SQL safety guard 阻止 `DELETE`、`DROP`、`UPDATE` 等危险语句。
-- 用 RAG 回答政策/流程问题，并返回 citations。
+- 用 hybrid RAG 回答政策/流程问题，并返回 citations、vector score、lexical score。
 - 记录 Agent execution trace，便于 debug、审计和评估。
 - 内置 eval cases，评估 SQL safety 和 RAG citation/refusal。
 - 使用 Docker Compose 一键启动前端、后端和数据库。
@@ -37,9 +39,9 @@ CivicOps Agent 是一个基于真实 NYC 311 城市服务请求数据的城市�
 | Database | PostgreSQL in Docker, SQLite fallback for local tests |
 | Frontend | React, TypeScript, Vite |
 | Data | NYC 311 Service Requests API |
-| Agent | Tool routing, safe SQL tool, execution traces |
-| RAG | Markdown policy docs, chunking, retrieval, citations, refusal |
-| Evaluation | JSON eval cases, SQL safety pass rate, RAG citation/refusal rate |
+| Agent | Structured planner, tool registry, SQL/RAG/clarification tools, execution traces |
+| RAG | Markdown policy docs, chunking, embeddings, hybrid retrieval, grounded generation, citations, refusal |
+| Evaluation | JSON eval cases, SQL safety pass rate, RAG citation/refusal/evidence hit rate |
 | Deployment | Docker Compose |
 
 ## Architecture
@@ -50,13 +52,15 @@ flowchart LR
   Ingest --> DB[("PostgreSQL")]
   DB --> Dash["Dashboard APIs"]
   DB --> SQLTool["Safe SQL Tool"]
-  Docs["Policy Markdown Docs"] --> RAG["RAG Index + Retriever"]
+  Docs["Policy Markdown Docs"] --> Chunk["Chunk + Embed"]
+  Chunk --> RAG["Hybrid Retriever"]
   User["React Console"] --> Dash
-  User --> Agent["Agent Router"]
+  User --> Agent["Agent Planner"]
   Agent --> SQLTool
   Agent --> RAG
+  RAG --> Chat["Chat Provider"]
   SQLTool --> Trace["Execution Trace"]
-  RAG --> Trace
+  Chat --> Trace
   Trace --> User
 ```
 
@@ -136,20 +140,26 @@ cd backend
 1. Open the dashboard.
 2. Import 1,000 to 3,000 NYC 311 records.
 3. Review total requests, open/closed counts, top complaint types, borough distribution, agency workload, and daily trend.
-4. Ask the SQL Agent:
+4. Open Agent Run and ask a routed question:
+
+```text
+What policy explains allowed SQL statements?
+```
+
+5. Ask the SQL tool directly:
 
 ```text
 What are the top complaint types?
 ```
 
-5. Reindex RAG docs and ask:
+6. Reindex RAG docs and ask:
 
 ```text
 What SQL statements is the agent allowed to execute?
 ```
 
-6. Open traces to inspect tool input, output, route, status, and latency.
-7. Run evals to see SQL safety and RAG citation/refusal metrics.
+7. Open traces to inspect planner output, selected tool, tool input, output, route, status, and latency.
+8. Run evals to see SQL safety and RAG citation/refusal/evidence metrics.
 
 Detailed script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
 
@@ -161,9 +171,9 @@ Detailed script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
 | `POST /ingestion/run` | Import real NYC 311 records |
 | `GET /dashboard/summary` | Dashboard metrics |
 | `POST /agent/sql` | Natural-language SQL analysis |
-| `POST /agent/route` | Route a question to SQL/RAG/clarification |
-| `POST /rag/reindex` | Index local policy documents |
-| `POST /rag/ask` | RAG question answering with citations |
+| `POST /agent/route` | Plan a tool call and route to SQL/RAG/clarification |
+| `POST /rag/reindex` | Index local policy documents and write chunk embeddings |
+| `POST /rag/ask` | Hybrid RAG question answering with citations |
 | `GET /traces` | List execution traces |
 | `POST /evals/run` | Run SQL/RAG evaluation cases |
 
@@ -175,10 +185,23 @@ Pipeline:
 
 1. Parse local markdown policy/process documents.
 2. Chunk documents by heading and size.
-3. Retrieve relevant chunks with lexical scoring.
-4. Answer only when evidence is strong enough.
-5. Return citations with document title, chunk ID, section heading, snippet, and score.
-6. Refuse weak-evidence questions instead of guessing.
+3. Generate and store one embedding per chunk.
+4. Retrieve candidate chunks with hybrid vector/keyword scoring.
+5. Rerank with vector score, lexical overlap, heading match, and phrase match.
+6. Gate weak evidence before generation.
+7. Call the configured chat provider to generate a grounded answer from retrieved evidence.
+8. Return citations with document title, chunk ID, section heading, snippet, hybrid score, lexical score, vector score, and matched terms.
+9. Refuse weak-evidence questions instead of guessing.
+
+Default no-key mode:
+
+- `LLM_PROVIDER=mock` uses a local mock chat provider so the app and tests run without secrets.
+- `EMBEDDING_PROVIDER=local_hash` uses deterministic local hash embeddings so reindexing works without an embedding API.
+
+Production-like mode:
+
+- Set `LLM_PROVIDER=deepseek` and `DEEPSEEK_API_KEY` to use DeepSeek for planner/RAG answer generation.
+- Set `EMBEDDING_PROVIDER=api`, `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, and `EMBEDDING_MODEL` to use an OpenAI-compatible embedding service.
 
 Optional DeepSeek support:
 
@@ -194,25 +217,26 @@ Never commit real keys. Keep them only in `.env`.
 
 ## Safe SQL Agent
 
-The SQL agent is intentionally conservative.
+The SQL tool is intentionally conservative.
 
 Flow:
 
 1. User asks a natural-language metrics question.
-2. Deterministic planner maps it to a known read-only SQL pattern.
-3. SQL safety guard validates that it is a single `SELECT`.
-4. Dangerous statements are blocked.
-5. Query executes through SQLAlchemy.
-6. Results, generated SQL, assumptions, confidence, and trace ID are returned.
+2. If DeepSeek is configured, a schema-aware planner may generate one JSON-structured SQL plan.
+3. Without DeepSeek, deterministic templates provide a safe fallback.
+4. SQL safety guard strips comments, blocks multiple statements, blocks destructive keywords, parses with `sqlglot`, and requires a single `SELECT`.
+5. A default `LIMIT` is enforced for listing queries.
+6. Query executes through SQLAlchemy.
+7. Results, generated SQL, assumptions, confidence, and trace ID are returned.
 
-This design is safer for reproducible demos than allowing an LLM to generate arbitrary SQL directly.
+This design allows LLM-assisted planning when configured, but backend validation still owns execution safety.
 
 ## Evaluation
 
 Evaluation files live in `evals/`.
 
-- `sql_safety_cases.json`: verifies that allowed SELECT queries pass and destructive SQL is blocked.
-- `rag_cases.json`: verifies citation behavior and weak-evidence refusal.
+- `sql_safety_cases.json`: verifies that allowed SELECT queries pass, destructive SQL is blocked, and SQL comments do not bypass guards.
+- `rag_cases.json`: verifies citation behavior, evidence-term hits, and weak-evidence refusal.
 
 Run from the UI or API:
 
@@ -241,7 +265,11 @@ backend/
     services/         ingestion, dashboard, SQL agent, RAG, evals, tracing
   tests/
 frontend/
-  src/                React console
+  src/
+    api.ts            API client
+    types.ts          Shared frontend types
+    components/       Reusable UI pieces
+    pages/            Dashboard, Agent Run, SQL Tool, Hybrid RAG, Traces, Evals
 sample_data/policies/ RAG policy docs
 evals/                SQL/RAG eval cases
 docs/                 project overview and demo docs
@@ -255,17 +283,18 @@ Implemented:
 - Backend API
 - Real data ingestion
 - Dashboard metrics
-- Safe SQL Agent
-- RAG assistant
+- Agent planner and tool registry
+- Safe SQL tool with optional LLM planner and backend safety validation
+- Hybrid RAG with chunk embeddings, hybrid retrieval, grounded generation, citations, and refusal
 - Execution traces
 - Evaluation runner
-- React UI
+- React UI split into API/types/components/pages
 - Docker Compose
 - Tests and README
 
 Intentional MVP boundaries:
 
-- SQL planning is deterministic and safety-first.
-- RAG uses local markdown docs and lexical retrieval for reproducible demos.
-- DeepSeek is optional and read from environment only.
-- Production auth, queue workers, cloud deployment, and advanced reranking are future extensions.
+- Default no-key mode uses mock chat generation and local hash embeddings; configure external providers for production-like LLM and embedding behavior.
+- Vector search is database-backed JSON plus application-side cosine scoring, not pgvector yet.
+- SQL execution is read-only and intentionally narrow.
+- Production auth, queue workers, cloud deployment, document upload, pgvector, and learned reranking are future extensions.

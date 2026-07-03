@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 class ReindexResponse(BaseModel):
     documents_indexed: int
     chunks_indexed: int
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
 
 
 class RAGAskRequest(BaseModel):
@@ -17,6 +19,9 @@ class Citation(BaseModel):
     heading: str | None = None
     snippet: str
     score: float
+    lexical_score: float | None = None
+    vector_score: float | None = None
+    matched_terms: list[str] = []
 
 
 class RAGAskResponse(BaseModel):
@@ -25,4 +30,6 @@ class RAGAskResponse(BaseModel):
     citations: list[Citation]
     confidence: float
     refused: bool
+    retrieval_method: str = "hybrid_vector_keyword"
+    generation_provider: str = "mock"
     trace_id: int | None = None

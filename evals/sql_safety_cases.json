@@ -23,5 +23,10 @@
     "name": "block_multi_statement",
     "sql": "SELECT COUNT(*) FROM service_requests; DROP TABLE service_requests;",
     "should_allow": false
+  },
+  {
+    "name": "allow_comment_then_select",
+    "sql": "/* read-only check */ SELECT COUNT(*) FROM service_requests",
+    "should_allow": true
   }
 ]

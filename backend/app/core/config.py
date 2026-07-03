@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
+    embedding_provider: str = "local_hash"
+    embedding_api_key: str | None = None
+    embedding_base_url: str | None = None
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 384
     nyc_311_endpoint: str = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
 
     model_config = SettingsConfigDict(
