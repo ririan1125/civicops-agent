@@ -2,7 +2,7 @@
 
 **Urban Service Request Triage & Operations Copilot**
 
-[Public Demo](https://ririan1125.github.io/civicops-agent/) · [Deploy Backend on Render](https://render.com/deploy?repo=https://github.com/ririan1125/civicops-agent) · [API Docs Local](http://localhost:8000/docs)
+[Live App](https://ririan1125.github.io/civicops-agent/) · [Live API](https://civicops-agent-api-ririan1125.onrender.com/docs) · [Deploy Backend on Render](https://render.com/deploy?repo=https://github.com/ririan1125/civicops-agent)
 
 CivicOps Agent is a full-stack operations copilot for city service request teams. It imports real NYC 311 data, answers operational metric questions with a safe SQL tool, answers policy/process questions with hybrid RAG, and records every tool run for auditability.
 
@@ -88,17 +88,21 @@ Open:
 - Backend API docs: http://localhost:8000/docs
 - Health check: http://localhost:8000/health
 
-## Public Demo
+## Live Deployment
 
-The GitHub Pages demo is deployed at:
+The public frontend is deployed with GitHub Pages:
 
 ```text
 https://ririan1125.github.io/civicops-agent/
 ```
 
-This public demo runs the React console in `VITE_API_BASE_URL=demo` mode. It uses built-in sample responses so visitors can inspect the UI, Agent planner flow, Hybrid RAG citations, traces, and eval screens without needing access to a backend server.
+The live backend is deployed on Render:
 
-For real NYC 311 ingestion, PostgreSQL, and live FastAPI execution, run the Docker or local development stack.
+```text
+https://civicops-agent-api-ririan1125.onrender.com
+```
+
+The public frontend calls the Render FastAPI service, which uses PostgreSQL and can ingest real NYC 311 records. The backend runs on Render's free instance type, so the first request after inactivity can take extra time while the service wakes up.
 
 ## Cloud Backend Deployment
 
@@ -108,13 +112,19 @@ One-click deploy:
 
 [Deploy Backend on Render](https://render.com/deploy?repo=https://github.com/ririan1125/civicops-agent)
 
-Expected backend URL after deployment:
+Current backend URL:
 
 ```text
 https://civicops-agent-api-ririan1125.onrender.com
 ```
 
-After the backend is live, set the GitHub repository variable `VITE_API_BASE_URL` to the backend URL and rerun the GitHub Pages workflow. The public frontend will then call the live FastAPI service instead of the built-in demo API.
+The GitHub Pages workflow builds the frontend with:
+
+```text
+VITE_API_BASE_URL=https://civicops-agent-api-ririan1125.onrender.com
+```
+
+If the backend URL changes, update `.github/workflows/deploy-pages.yml` or set the GitHub repository variable `VITE_API_BASE_URL`, then rerun the workflow.
 
 ## Docker 快速启动
 
