@@ -29,7 +29,8 @@ def optional_deepseek_completion(system_prompt: str, user_prompt: str) -> str | 
         "temperature": 0.1,
     }
     headers = {"Authorization": f"Bearer {settings.deepseek_api_key}"}
-    with httpx.Client(timeout=45) as client:
+    timeout = httpx.Timeout(20.0, connect=5.0, read=20.0, write=10.0, pool=5.0)
+    with httpx.Client(timeout=timeout) as client:
         response = client.post(f"{settings.deepseek_base_url.rstrip('/')}/v1/chat/completions", json=payload, headers=headers)
         response.raise_for_status()
     data = response.json()
@@ -52,9 +53,16 @@ def _mock_grounded_completion(user_prompt: str) -> str:
 def complete_chat(system_prompt: str, user_prompt: str) -> ChatCompletion:
     settings = get_settings()
     if settings.llm_provider.lower() == "deepseek" and settings.deepseek_api_key:
-        content = optional_deepseek_completion(system_prompt, user_prompt)
-        if content:
-            return ChatCompletion(content=content, provider="deepseek", model=settings.deepseek_model)
+        try:
+            content = optional_deepseek_completion(system_prompt, user_prompt)
+            if content:
+                return ChatCompletion(content=content, provider="deepseek", model=settings.deepseek_model)
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
+            return ChatCompletion(
+                content=_mock_grounded_completion(user_prompt),
+                provider="mock_deepseek_fallback",
+                model="mock-grounded",
+            )
     return ChatCompletion(content=_mock_grounded_completion(user_prompt), provider="mock", model="mock-grounded")
 
 
