@@ -7,6 +7,7 @@ from app.db.models import PolicyChunk, PolicyChunkEmbedding, PolicyDocument
 from app.services.rag.chunker import chunk_markdown
 from app.services.rag.embeddings import embed_texts
 from app.services.rag.source_loader import DocumentSource, load_document_sources, sample_policy_dir
+from app.services.rag.vector_store import sync_pgvector_store_if_available
 
 
 @dataclass
@@ -120,6 +121,7 @@ def index_policy_documents(
         else:
             local_sources_indexed += 1
     db.commit()
+    sync_pgvector_store_if_available(db)
     return IndexResult(
         documents_indexed=documents_indexed,
         chunks_indexed=chunks_indexed,

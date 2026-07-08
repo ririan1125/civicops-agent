@@ -15,12 +15,12 @@ The system imports real NYC 311 records from the official NYC Open Data API, sto
 
 ## 中文说明
 
-CivicOps Agent 是一个城市服务请求运营分析 Agent。它不是普通聊天机器人，而是把真实 NYC 311 数据、SQL 分析、官方文档 RAG、工具路由、执行 trace 放在同一个工作台里。
+CivicOps Agent 是一个城市服务请求运营分析系统。它不是普通聊天机器人，而是把真实 NYC 311 数据、SQL 分析、官方文档 RAG、工具路由、人工复核边界和执行 trace 放在同一个工作台里。
 
 它主要解决两类问题：
 
-- 数据问题：例如投诉最多的类型是什么、哪个区请求最多、还有多少未关闭请求、哪个部门工作量最大。
-- 文档/流程问题：例如 NYC311 服务请求状态怎么查、系统允许什么 SQL、Open Data 字段是什么意思、什么时候需要人工复核、RAG 证据不足时怎么办。
+- 数据问题：例如投诉最多的类型是什么、哪个区请求最多、还有多少未关闭请求、哪个 agency 工作量最大、最近数据更新到哪一天。
+- 文档/流程问题：例如 NYC311 服务请求状态怎么查、某类投诉应该看哪篇官方文章、Open Data 字段是什么意思、系统为什么只允许 SELECT、什么时候需要人工审批、RAG 证据不足时怎么处理。
 
 ## Live Deployment
 
@@ -48,7 +48,8 @@ flowchart LR
   DB --> SQLTool["Safe SQL Tool"]
   Docs["Local + Official Docs"] --> Loader["Source Loader"]
   Loader --> Chunk["Chunk + Embed"]
-  Chunk --> RAG["Hybrid Retriever"]
+  Chunk --> Vector[("pgvector / JSON fallback")]
+  Vector --> RAG["Hybrid Retriever"]
   User["React UI"] --> Agent["Agent Planner"]
   Agent --> SQLTool
   Agent --> RAG
@@ -135,8 +136,9 @@ Local project docs + local multimodal assets + official NYC311/Open Data sources
   -> markdown-like text normalization
   -> heading-aware chunking
   -> embeddings
-  -> BM25 + vector hybrid retrieval
-  -> query expansion and reranking
+  -> pgvector-first vector retrieval with JSON fallback
+  -> BM25 + vector + graph hybrid retrieval
+  -> query expansion, MMR grouping, and reranking
   -> evidence gate
   -> grounded answer with citations
 ```
@@ -168,21 +170,11 @@ RAG_MAX_311_ARTICLES=120
 RAG_REMOTE_CONCURRENCY=6
 ```
 
-Retrieval is not just direct context stuffing. The backend computes BM25 lexical scores, vector cosine scores, heading/phrase bonuses, and a reranked hybrid score before sending evidence to the chat model. Chinese questions also get small query-expansion terms for common NYC311 concepts such as service request status, complaints, Open Data metadata, and SQL safety.
+Retrieval is not direct context stuffing. The backend computes query expansion, BM25 lexical scores, vector cosine scores, source-aware bonuses, knowledge-graph entity bonuses, and a reranked hybrid score before sending evidence to the chat model. PostgreSQL deployments use `rag_vector_embeddings` with pgvector/HNSW for vector recall; SQLite or uninitialized deployments fall back to JSON vectors and application-side cosine.
 
-RAG answers return:
+Chinese questions also get query-expansion terms for common NYC311 concepts such as service request status, complaints, Open Data metadata, and SQL safety.
 
-- answer text;
-- source citations;
-- document title;
-- source URL when available;
-- chunk id;
-- heading;
-- snippet;
-- hybrid score;
-- vector score;
-- lexical score;
-- matched terms.
+RAG answers return answer text, citations, source URL, chunk id, heading, snippet, hybrid score, vector score, vector backend, lexical score, graph entities, matched terms, confidence, generation provider, and trace id.
 
 ## Agent Routing
 
@@ -219,18 +211,20 @@ This should route to RAG.
 | `GET /rag/sources` | List configured official remote RAG sources |
 | `POST /rag/reindex` | Rebuild local and official document index |
 | `POST /rag/ask` | Hybrid RAG question answering |
-| `POST /rag/vector-store/init` | Optional PostgreSQL pgvector table, backfill, and HNSW index initialization |
+| `POST /rag/vector-store/init` | PostgreSQL pgvector table, backfill, and HNSW index initialization |
+| `GET /rag/vector-store/schema` | Show RAG collection, physical table, index, dimensions, and logical partitions |
+| `GET /rag/knowledge-graph` | Show lightweight entity graph built from indexed chunks |
 | `GET /traces` | Execution trace history |
 | `POST /evals/run` | SQL/RAG evaluation suite |
 | `POST /evals/rag-retrieval` | Retrieval Recall@K and MRR evaluation |
-| `POST /evals/embedding-benchmark` | Same retrieval benchmark for the currently indexed embedding provider |
+| `POST /evals/embedding-benchmark` | Vector-only embedding baseline comparison for local hash dimensions |
 
 ## Local Development
 
 Backend:
 
 ```powershell
-cd D:\Backup\Documents\agent开发\backend
+cd "D:\Backup\Documents\agent开发\backend"
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 copy .env.example .env
@@ -240,7 +234,7 @@ copy .env.example .env
 Frontend:
 
 ```powershell
-cd D:\Backup\Documents\agent开发\frontend
+cd "D:\Backup\Documents\agent开发\frontend"
 npm install
 npm run dev
 ```
@@ -248,8 +242,8 @@ npm run dev
 Docker:
 
 ```powershell
-cd D:\Backup\Documents\agent开发
-copy .env.example .env
+cd "D:\Backup\Documents\agent开发"
+copy backend\.env.example backend\.env
 docker compose up --build
 ```
 
@@ -264,7 +258,7 @@ Open:
 Run backend tests:
 
 ```powershell
-cd D:\Backup\Documents\agent开发\backend
+cd "D:\Backup\Documents\agent开发\backend"
 .\.venv\Scripts\python -m pytest -q
 ```
 
@@ -273,7 +267,13 @@ Refresh official RAG sources locally:
 ```powershell
 curl -X POST http://localhost:8000/rag/reindex `
   -H "Content-Type: application/json" `
-  -d "{\"include_remote\":true}"
+  -d "{\"include_remote\":true,\"max_311_articles\":120}"
+```
+
+Initialize pgvector locally on PostgreSQL:
+
+```powershell
+curl -X POST http://localhost:8000/rag/vector-store/init
 ```
 
 Sync latest 311 data locally:
@@ -311,15 +311,16 @@ Never commit real API keys.
 Embedding comparison flow:
 
 ```text
-1. Set EMBEDDING_PROVIDER / EMBEDDING_MODEL / EMBEDDING_API_KEY.
+1. Set EMBEDDING_PROVIDER / EMBEDDING_MODEL / EMBEDDING_API_KEY when testing an external provider.
 2. Run POST /rag/reindex.
-3. Run POST /evals/embedding-benchmark.
-4. Compare Recall@1, Recall@3, Recall@5, MRR, latency, and cost across runs.
+3. Run POST /evals/rag-retrieval for the full hybrid retrieval score.
+4. Run POST /evals/embedding-benchmark for vector-only local baseline comparison.
+5. Compare Recall@1, Recall@3, Recall@5, MRR, latency, and cost across runs.
 ```
 
-## Optional pgvector Store
+## pgvector Store
 
-The default portable store keeps vectors in JSON and scores them in application code. PostgreSQL deployments can initialize a pgvector mirror table:
+PostgreSQL deployments can initialize a pgvector mirror table:
 
 ```text
 POST /rag/vector-store/init
@@ -343,13 +344,24 @@ It also creates an HNSW cosine index:
 USING hnsw (embedding vector_cosine_ops)
 ```
 
-The current retriever still uses the portable JSON scoring path; this endpoint prepares the database schema and backfills vectors so the next step can switch retrieval execution to pgvector without changing the ingestion pipeline again.
+When this table exists, the retriever uses pgvector for vector recall and keeps BM25, graph bonuses, and MMR reranking in the application layer. When pgvector is unavailable, it automatically falls back to JSON vector scoring.
+
+Inspect the active store:
+
+```text
+GET /rag/vector-store/schema
+```
+
+The live deployment also has a GitHub Actions workflow at `.github/workflows/daily-data-sync.yml`:
+
+- daily: `POST /ingestion/sync-latest` to upsert new/recent NYC 311 rows;
+- weekly: `POST /rag/reindex` and `POST /rag/vector-store/init` to refresh official documents and pgvector rows.
 
 ## Current Boundaries
 
 - No production authentication yet.
 - Public admin-like endpoints are acceptable for this demo, but should be protected before real use.
-- Vector storage still uses JSON vectors and application-side cosine scoring by default; `POST /rag/vector-store/init` prepares a pgvector mirror table and HNSW index on PostgreSQL.
+- PostgreSQL deployments use pgvector when initialized; local SQLite development uses JSON vectors as fallback.
 - Multimodal support currently means text extraction from PDFs plus OCR/caption text ingestion for images; true image embeddings require a multimodal embedding provider.
 - RAG reindex is currently a synchronous admin endpoint; very large crawls should move to a background job queue.
 - Render free tier can sleep.

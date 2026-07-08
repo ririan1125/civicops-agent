@@ -1,11 +1,20 @@
 import json
 from pathlib import Path
 
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from app.schemas.evals import EvalMetric, EvalRunResponse, RAGRetrievalCaseResult, RAGRetrievalEvalResponse
+from app.db.models import PolicyChunk
+from app.schemas.evals import (
+    EmbeddingBenchmarkResponse,
+    EmbeddingBenchmarkVariant,
+    EvalMetric,
+    EvalRunResponse,
+    RAGRetrievalCaseResult,
+    RAGRetrievalEvalResponse,
+)
 from app.services.rag.answerer import answer_rag_question
-from app.services.rag.embeddings import embedding_runtime_label
+from app.services.rag.embeddings import cosine_similarity, embed_texts_local_hash, embedding_runtime_label
 from app.services.rag.retriever import retrieve_chunks
 from app.services.sql_agent.safety import SQLSafetyError, assert_safe_select
 
@@ -128,3 +137,100 @@ def run_rag_retrieval_eval(db: Session) -> RAGRetrievalEvalResponse:
     ]
     provider, model = embedding_runtime_label()
     return RAGRetrievalEvalResponse(metrics=metrics, cases=case_results, embedding_provider=provider, embedding_model=model)
+
+
+def _metrics_from_case_results(case_results: list[RAGRetrievalCaseResult]) -> list[EvalMetric]:
+    total = len(case_results)
+    hit_at_1 = sum(1 for case in case_results if case.hit_rank is not None and case.hit_rank <= 1)
+    hit_at_3 = sum(1 for case in case_results if case.hit_rank is not None and case.hit_rank <= 3)
+    hit_at_5 = sum(1 for case in case_results if case.hit_rank is not None and case.hit_rank <= 5)
+    reciprocal_rank_sum = round(sum(case.reciprocal_rank for case in case_results), 3)
+    return [
+        EvalMetric(name="rag_recall_at_1", passed=hit_at_1, total=total, score=round(hit_at_1 / total, 3) if total else 0.0),
+        EvalMetric(name="rag_recall_at_3", passed=hit_at_3, total=total, score=round(hit_at_3 / total, 3) if total else 0.0),
+        EvalMetric(name="rag_recall_at_5", passed=hit_at_5, total=total, score=round(hit_at_5 / total, 3) if total else 0.0),
+        EvalMetric(name="rag_mrr", passed=reciprocal_rank_sum, total=total, score=round(reciprocal_rank_sum / total, 3) if total else 0.0),
+    ]
+
+
+def _run_vector_only_benchmark(
+    cases: list[dict],
+    chunks: list[PolicyChunk],
+    dimensions: int,
+) -> EmbeddingBenchmarkVariant:
+    chunk_texts = [f"{chunk.document.title}\n{chunk.heading or ''}\n{chunk.content}" for chunk in chunks]
+    chunk_embeddings = embed_texts_local_hash(chunk_texts, dimensions)
+    case_results: list[RAGRetrievalCaseResult] = []
+
+    for case in cases:
+        expected = [str(value) for value in case.get("expected", [])]
+        query_embedding = embed_texts_local_hash([case["question"]], dimensions).vectors[0]
+        scored = [
+            (
+                chunk,
+                cosine_similarity(query_embedding, vector),
+            )
+            for chunk, vector in zip(chunks, chunk_embeddings.vectors)
+        ]
+        top = sorted(scored, key=lambda item: item[1], reverse=True)[:5]
+        labels = [
+            f"{chunk.document.title} | {chunk.heading or ''} | {chunk.document.source_path or ''}"
+            for chunk, _ in top
+        ]
+        hit_rank: int | None = None
+        for index, label in enumerate(labels, start=1):
+            if _matches_expected(label, expected):
+                hit_rank = index
+                break
+        reciprocal_rank = round(1 / hit_rank, 4) if hit_rank else 0.0
+        case_results.append(
+            RAGRetrievalCaseResult(
+                name=case["name"],
+                question=case["question"],
+                expected=expected,
+                retrieved=labels,
+                hit_rank=hit_rank,
+                reciprocal_rank=reciprocal_rank,
+                top_score=top[0][1] if top else None,
+            )
+        )
+
+    return EmbeddingBenchmarkVariant(
+        provider=chunk_embeddings.provider,
+        model=chunk_embeddings.model,
+        dimensions=chunk_embeddings.dimensions,
+        metrics=_metrics_from_case_results(case_results),
+        cases=case_results,
+    )
+
+
+def run_embedding_benchmark(db: Session) -> EmbeddingBenchmarkResponse:
+    cases = _load_json(evals_dir() / "rag_retrieval_cases.json")
+    chunks = (
+        db.query(PolicyChunk)
+        .options(joinedload(PolicyChunk.document))
+        .order_by(PolicyChunk.id.asc())
+        .all()
+    )
+    variants = [_run_vector_only_benchmark(cases, chunks, dimensions) for dimensions in (256, 384, 768)]
+    best_variant = None
+    if variants:
+        best = max(
+            variants,
+            key=lambda variant: (
+                next((metric.score for metric in variant.metrics if metric.name == "rag_mrr"), 0.0),
+                next((metric.score for metric in variant.metrics if metric.name == "rag_recall_at_1"), 0.0),
+            ),
+        )
+        best_variant = best.model
+    return EmbeddingBenchmarkResponse(
+        corpus_chunks=len(chunks),
+        cases_count=len(cases),
+        best_variant=best_variant,
+        variants=variants,
+        notes=[
+            "This benchmark isolates embedding behavior with vector-only ranking.",
+            "The production answer path still uses hybrid BM25 + vector + graph + MMR retrieval.",
+            "External embedding APIs can be compared by setting EMBEDDING_PROVIDER=api and reindexing.",
+        ],
+    )

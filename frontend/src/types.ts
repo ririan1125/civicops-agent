@@ -31,6 +31,8 @@ export type Citation = {
   score: number;
   lexical_score?: number | null;
   vector_score?: number | null;
+  vector_backend?: string | null;
+  graph_entities: string[];
   matched_terms: string[];
 };
 
@@ -68,4 +70,32 @@ export type TraceRecord = {
 export type EvalResponse = {
   metrics: { name: string; passed: number; total: number; score: number }[];
   failures: Record<string, unknown>[];
+};
+
+export type RetrievalEvalResponse = {
+  metrics: { name: string; passed: number; total: number; score: number }[];
+  cases: {
+    name: string;
+    question: string;
+    expected: string[];
+    retrieved: string[];
+    hit_rank: number | null;
+    reciprocal_rank: number;
+    top_score: number | null;
+  }[];
+  embedding_provider: string;
+  embedding_model: string;
+};
+
+export type EmbeddingBenchmarkResponse = {
+  corpus_chunks: number;
+  cases_count: number;
+  best_variant: string | null;
+  variants: {
+    provider: string;
+    model: string;
+    dimensions: number;
+    metrics: { name: string; passed: number; total: number; score: number }[];
+  }[];
+  notes: string[];
 };

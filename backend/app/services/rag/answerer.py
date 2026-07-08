@@ -10,7 +10,8 @@ from app.services.rag.indexer import index_policy_documents
 from app.services.rag.retriever import RetrievedChunk, retrieve_chunks
 
 
-RETRIEVAL_METHOD = "hybrid_bm25_vector_rerank"
+JSON_RETRIEVAL_METHOD = "hybrid_bm25_json_vector_graph_mmr"
+PGVECTOR_RETRIEVAL_METHOD = "hybrid_bm25_pgvector_graph_mmr"
 
 
 def _snippet(text: str, max_chars: int = 260) -> str:
@@ -32,6 +33,8 @@ def _citation(item: RetrievedChunk) -> Citation:
         score=item.score,
         lexical_score=item.lexical_score,
         vector_score=item.vector_score,
+        vector_backend=item.vector_backend,
+        graph_entities=item.graph_entities or [],
         matched_terms=item.matched_terms,
     )
 
@@ -56,8 +59,19 @@ def _compose_answer(question: str, retrieved: list[RetrievedChunk]) -> tuple[str
 
 def _asks_for_private_contact(question: str) -> bool:
     normalized = question.lower()
-    contact_terms = ["phone", "email", "address", "contact", "telephone", "手机", "电话", "邮箱", "地址", "联系方式"]
-    private_terms = ["private", "personal", "home", "私人", "个人", "家庭"]
+    contact_terms = [
+        "phone",
+        "email",
+        "address",
+        "contact",
+        "telephone",
+        "\u624b\u673a",
+        "\u7535\u8bdd",
+        "\u90ae\u7bb1",
+        "\u5730\u5740",
+        "\u8054\u7cfb\u65b9\u5f0f",
+    ]
+    private_terms = ["private", "personal", "home", "\u79c1\u4eba", "\u4e2a\u4eba", "\u5bb6\u5ead"]
     return any(term in normalized for term in contact_terms) and any(term in normalized for term in private_terms)
 
 
@@ -74,11 +88,18 @@ def _has_sufficient_evidence(retrieved: list[RetrievedChunk]) -> bool:
     return top.score >= 0.2 and top.lexical_score >= 0.08
 
 
+def _retrieval_method(retrieved: list[RetrievedChunk]) -> str:
+    if any(item.vector_backend == "pgvector" for item in retrieved):
+        return PGVECTOR_RETRIEVAL_METHOD
+    return JSON_RETRIEVAL_METHOD
+
+
 def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskResponse:
     if db.query(PolicyChunk).count() == 0:
         index_policy_documents(db, include_remote=get_settings().rag_include_remote_sources)
 
     retrieved = retrieve_chunks(db, question, top_k=top_k)
+    retrieval_method = _retrieval_method(retrieved)
     if _asks_for_private_contact(question) or not _has_sufficient_evidence(retrieved):
         return RAGAskResponse(
             question=question,
@@ -86,7 +107,7 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
             citations=[],
             confidence=0.0,
             refused=True,
-            retrieval_method=RETRIEVAL_METHOD,
+            retrieval_method=retrieval_method,
             generation_provider="none",
         )
 
@@ -98,6 +119,6 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
         citations=[_citation(item) for item in retrieved],
         confidence=confidence,
         refused=False,
-        retrieval_method=RETRIEVAL_METHOD,
+        retrieval_method=retrieval_method,
         generation_provider=provider,
     )

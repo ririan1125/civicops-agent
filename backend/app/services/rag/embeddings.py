@@ -51,6 +51,16 @@ def _local_hash_embedding(text: str, dimensions: int) -> list[float]:
     return _normalize(vector)
 
 
+def embed_texts_local_hash(texts: list[str], dimensions: int) -> EmbeddingBatch:
+    dimensions = max(64, dimensions)
+    return EmbeddingBatch(
+        provider="local_hash",
+        model=f"local-hash-{dimensions}",
+        dimensions=dimensions,
+        vectors=[_local_hash_embedding(text, dimensions) for text in texts],
+    )
+
+
 def _api_embeddings(texts: list[str]) -> EmbeddingBatch:
     settings = get_settings()
     if not settings.embedding_base_url or not settings.embedding_api_key:
@@ -87,13 +97,7 @@ def embed_texts(texts: list[str]) -> EmbeddingBatch:
     if provider in {"api", "openai_compatible"}:
         return _api_embeddings(texts)
 
-    dimensions = max(64, settings.embedding_dimensions)
-    return EmbeddingBatch(
-        provider="local_hash",
-        model=f"local-hash-{dimensions}",
-        dimensions=dimensions,
-        vectors=[_local_hash_embedding(text, dimensions) for text in texts],
-    )
+    return embed_texts_local_hash(texts, settings.embedding_dimensions)
 
 
 def embed_query(text: str) -> EmbeddingBatch:

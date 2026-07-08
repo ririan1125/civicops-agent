@@ -1,0 +1,36 @@
+name: Daily CivicOps data sync
+
+on:
+  schedule:
+    - cron: "20 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Wake backend
+        run: |
+          curl --retry 5 --retry-delay 10 --max-time 60 \
+            https://civicops-agent-api-ririan1125.onrender.com/health
+
+      - name: Sync latest NYC 311 service requests
+        run: |
+          curl --fail-with-body --retry 2 --retry-delay 10 --max-time 600 \
+            -X POST https://civicops-agent-api-ririan1125.onrender.com/ingestion/sync-latest \
+            -H "Content-Type: application/json" \
+            --data '{"limit":5000,"lookback_days":7}'
+
+      - name: Weekly refresh RAG sources and pgvector mirror
+        run: |
+          if [ "$(date -u +%u)" = "1" ]; then
+            curl --fail-with-body --retry 2 --retry-delay 10 --max-time 600 \
+              -X POST https://civicops-agent-api-ririan1125.onrender.com/rag/reindex \
+              -H "Content-Type: application/json" \
+              --data '{"include_remote":true,"max_311_articles":120}'
+            curl --fail-with-body --retry 2 --retry-delay 10 --max-time 180 \
+              -X POST https://civicops-agent-api-ririan1125.onrender.com/rag/vector-store/init
+          else
+            echo "RAG source refresh runs on Mondays UTC; SQL data sync runs daily."
+          fi

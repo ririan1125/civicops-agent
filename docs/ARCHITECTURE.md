@@ -33,10 +33,11 @@ The RAG pipeline handles unstructured and semi-structured documentation.
 2. Each source is converted to markdown-like text with a source title and source URL or local path.
 3. The text is chunked by markdown headings and maximum character length.
 4. Each chunk is embedded and written to `policy_chunks` and `policy_chunk_embeddings`.
-5. A user question is embedded and compared with chunk embeddings.
-6. Retrieval combines BM25 lexical scoring, vector similarity, query expansion, heading matches, and exact phrase signals.
-7. If evidence is weak, the system refuses instead of guessing.
-8. If evidence is strong, the backend sends the question and retrieved evidence to the configured chat provider and returns citations.
+5. PostgreSQL deployments can mirror embeddings into `rag_vector_embeddings` with `vector(...)` and an HNSW cosine index.
+6. A user question is embedded and first searched through pgvector when the mirror table exists; local SQLite or uninitialized deployments fall back to JSON vectors and application-side cosine.
+7. Retrieval combines BM25 lexical scoring, vector similarity, query expansion, heading matches, exact phrase signals, source-aware boosts, lightweight knowledge-graph entity boosts, and MMR diversity selection.
+8. If evidence is weak, the system refuses instead of guessing.
+9. If evidence is strong, the backend sends the question and retrieved evidence to the configured chat provider and returns citations.
 
 The current live refresh limit is controlled by `RAG_MAX_311_ARTICLES` and defaults to 120 official NYC311 article pages. The crawler uses bounded concurrency so a refresh can index a meaningful corpus without overwhelming the official source or the hosted backend.
 
@@ -52,12 +53,12 @@ If a question mixes both, the planner chooses the most direct tool first. A prod
 
 NYC 311 records change over time. The system supports manual imports and incremental sync. Incremental sync looks back over recent records and upserts them by `unique_key`, which captures new requests and status changes for recently created requests.
 
-Official documentation can also change. The RAG reindex endpoint can refresh remote official sources and rebuild the chunk index. A scheduled workflow can call the data sync endpoint daily and the RAG reindex endpoint periodically.
+Official documentation can also change. The RAG reindex endpoint can refresh remote official sources and rebuild the chunk index. The GitHub Actions workflow calls the data sync endpoint daily and refreshes RAG sources plus the pgvector mirror weekly.
 
 ## Current Production Tradeoffs
 
-The public demo defaults to local deterministic embeddings and mock grounded generation when no external keys are configured. This keeps the public system reproducible without committing secrets. When API keys are configured, the same pipeline can use an external chat model and an OpenAI-compatible embedding service.
+The public demo uses DeepSeek for chat generation when the Render secret is configured. It defaults to local deterministic embeddings unless an external embedding API is configured. This keeps the public system reproducible without committing secrets.
 
-The current vector store uses JSON vectors and application-side cosine scoring. This is simple and portable for the demo. A larger production corpus should use pgvector or another vector database, background jobs, source freshness metadata, and authenticated admin endpoints.
+The current PostgreSQL deployment supports pgvector/HNSW vector recall. JSON vector scoring remains as a local development fallback. A larger production corpus should move reindexing to background jobs, add source freshness metadata, compare a production embedding provider, and protect admin endpoints.
 
 Detailed Chinese implementation notes: [docs/ADVANCED_RAG_IMPLEMENTATION_CN.md](ADVANCED_RAG_IMPLEMENTATION_CN.md).

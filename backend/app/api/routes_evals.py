@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.schemas.evals import EvalRunResponse, RAGRetrievalEvalResponse
-from app.services.evals.eval_runner import run_all_evals, run_rag_retrieval_eval
+from app.schemas.evals import EmbeddingBenchmarkResponse, EvalRunResponse, RAGRetrievalEvalResponse
+from app.services.evals.eval_runner import run_all_evals, run_embedding_benchmark, run_rag_retrieval_eval
 
 router = APIRouter(prefix="/evals", tags=["evals"])
 
@@ -18,6 +18,6 @@ def run_rag_retrieval_evals(db: Session = Depends(get_session)) -> RAGRetrievalE
     return run_rag_retrieval_eval(db)
 
 
-@router.post("/embedding-benchmark", response_model=RAGRetrievalEvalResponse)
-def run_embedding_benchmark(db: Session = Depends(get_session)) -> RAGRetrievalEvalResponse:
-    return run_rag_retrieval_eval(db)
+@router.post("/embedding-benchmark", response_model=EmbeddingBenchmarkResponse)
+def run_embedding_benchmark_route(db: Session = Depends(get_session)) -> EmbeddingBenchmarkResponse:
+    return run_embedding_benchmark(db)

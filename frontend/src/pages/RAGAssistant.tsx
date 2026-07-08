@@ -68,10 +68,11 @@ export function RAGAssistant() {
               <article className="citation" key={citation.chunk_id}>
                 <strong>{citation.document_title}</strong>
                 <span>
-                  {citation.heading || "Untitled section"} | hybrid {citation.score} | vector {citation.vector_score ?? "n/a"} | lexical {citation.lexical_score ?? "n/a"}
+                  {citation.heading || "Untitled section"} | hybrid {citation.score} | vector {citation.vector_score ?? "n/a"} ({citation.vector_backend ?? "json"}) | lexical {citation.lexical_score ?? "n/a"}
                 </span>
                 {citation.source_url ? <a href={citation.source_url} target="_blank" rel="noreferrer">Open source</a> : null}
                 <p>{citation.snippet}</p>
+                {citation.graph_entities.length ? <small>Graph entities: {citation.graph_entities.join(", ")}</small> : null}
                 {citation.matched_terms.length ? <small>Matched terms: {citation.matched_terms.join(", ")}</small> : null}
               </article>
             ))}

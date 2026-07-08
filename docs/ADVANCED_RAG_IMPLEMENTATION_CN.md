@@ -1,58 +1,73 @@
-# Advanced RAG Implementation
+# CivicOps Agent 高级 RAG 实现说明
 
-本文说明 CivicOps Agent 当前 RAG 是怎么实现的，以及为什么它不是简单把几段文本塞进 prompt。
+这份文档说明当前项目里的 RAG 到底做了什么、处理了哪些文档、怎么检索、怎么评估，以及哪些地方仍然是边界。
 
-## 1. RAG 解决的问题
+## 1. 系统解决什么问题
 
-CivicOps Agent 同时处理两类问题：
+CivicOps Agent 处理的是城市服务请求运营问题。它把两类知识分开：
 
-- SQL 问题：来自结构化 NYC 311 service request 表，例如投诉数量、borough 分布、agency 工作量、open/closed 状态。
-- RAG 问题：来自非结构化或半结构化文档，例如 NYC311 FAQ、服务流程、Open Data 元数据、项目架构、安全策略。
+- SQL：回答结构化 NYC 311 数据问题，例如投诉数量、borough 分布、agency 工作量、open/closed 状态、平均解决时间。
+- RAG：回答文档证据问题，例如 NYC311 服务请求状态怎么查、某类投诉对应哪篇官方文章、Open Data 字段含义、系统安全策略、人工审批边界。
 
-RAG 不负责把 311 数据写进 SQL。SQL 数据由 ingestion pipeline 从 NYC Open Data API 拉取、清洗、upsert 到 PostgreSQL。RAG 负责把官方文档、FAQ、政策说明和项目文档变成可检索知识库，用来回答“流程、规则、字段含义、依据是什么”这类问题。
+RAG 不负责把 311 数据写进 SQL。SQL 数据由 ingestion pipeline 从 NYC Open Data API 拉取、清洗、按 `unique_key` upsert 到 PostgreSQL。RAG 负责把官方说明、FAQ、政策、项目文档变成可检索知识库。
 
-## 2. 当前索引了什么文档
+## 2. 当前索引了哪些文档
 
-RAG source loader 会加载四类内容：
+RAG source loader 会加载这些来源：
 
-1. 本地项目 policy 文档：安全 SQL、工具调用、human-in-the-loop、trace 规则。
-2. 本地项目架构文档：系统架构、数据链路、RAG/SQL 分工。
-3. 官方 NYC Open Data/Socrata 元数据：311 service request 数据集字段、描述、更新时间。
-4. 官方 NYC311 页面：固定核心页面 + 从 `https://portal.311.nyc.gov/report-problems/` 自动发现的 `article/?kanumber=KA-xxxxx` 官方文章。
+- `sample_data/policies/`：本地项目运行策略，例如 Safe SQL、human-in-the-loop、RAG evidence policy。
+- `README.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_OVERVIEW_CN.md`：项目架构和实现说明。
+- `sample_data/rag_assets/`：本地 PDF、图片、OCR/caption sidecar。
+- NYC311 固定官方页面：服务请求状态、服务请求说明、状态查询页面。
+- NYC311 官方文章目录：从 `https://portal.311.nyc.gov/report-problems/` 自动发现 `article/?kanumber=KA-xxxxx` 页面，默认抓取 120 篇。
+- NYC Open Data Socrata metadata：`https://data.cityofnewyork.us/api/views/erm2-nwe9`，用于索引字段、数据集说明、更新时间。
+- NYC Open Data Technical Standards Manual：GitHub Pages HTML 版本，以及可选 PDF。
 
-默认线上刷新会抓取最多 120 篇官方 NYC311 article。这个数量用 `RAG_MAX_311_ARTICLES` 控制，可以调高，但 Render 免费服务不适合在一次 HTTP 请求里抓几百上千篇。更大规模应改成后台任务队列。
+线上最近一次 reindex 的规模是 136 documents、约 1890 chunks、130 remote sources。
 
 ## 3. 文档处理流程
 
 ```text
-官方目录页
-  -> 抽取 kanumber article 链接
-  -> 下载官方 HTML / JSON / 可选 PDF
-  -> 提取正文，去掉 nav/script/style/footer
-  -> 转成 markdown-like 文本
-  -> 按标题和长度切 chunk
-  -> 为每个 chunk 生成 embedding
-  -> 写入 policy_documents / policy_chunks / policy_chunk_embeddings
+官方 HTML / JSON / PDF / 本地 Markdown / 本地 PDF / 本地图片
+  -> 提取正文或结构化 metadata
+  -> 转成 markdown-like text
+  -> heading-aware chunking
+  -> embedding
+  -> policy_documents / policy_chunks / policy_chunk_embeddings
+  -> pgvector mirror table
 ```
 
-每个 chunk 会保留：
+HTML 会去掉 `script/style/nav/header/footer`，保留标题、段落、列表。Socrata JSON 会被格式化成字段清单。PDF 用 `pypdf` 抽取文字层。图片优先读取 sidecar 文本，例如 `image.png.txt`、`image.png.ocr.txt`、`image.png.caption.md`；如果安装了 `Pillow` 和 `pytesseract`，会尝试 OCR。
 
-- document title；
-- source URL；
-- heading；
-- content；
-- token count；
-- embedding provider/model/dimensions/vector。
+## 4. 切块策略
 
-## 4. Embedding 策略
+当前 chunker 是 `backend/app/services/rag/chunker.py`：
 
-项目支持两种 embedding provider：
+- 按 Markdown 标题维护 `heading`。
+- 默认单块最大约 `900` 字符。
+- 超长时切分，并保留 `120` 字符 overlap。
+- 每个 chunk 保存 `heading`、`content`、`token_count`。
+
+这样做的原因：
+
+- NYC311 FAQ 和项目文档都有明显标题，按标题保留上下文比纯固定长度更稳定。
+- 900 字符适合当前几千 chunks 的 demo，不会把太多无关内容塞进 LLM prompt。
+- overlap 能减少边界处答案被切断的问题。
+
+下一步可以改成 token-based splitter，并对表格、PDF 页码、HTML section id 做更细粒度 metadata。
+
+## 5. Embedding 策略
+
+当前线上默认：
 
 ```text
 EMBEDDING_PROVIDER=local_hash
+EMBEDDING_DIMENSIONS=384
 ```
 
-这是无 key fallback。它把 token、bigram、中文字符 n-gram 哈希成固定维度向量。它的作用是保证 demo 和测试可以跑通，但它不是生产级语义 embedding。
+`local_hash` 是无 key fallback。它把 token、bigram、中文字符 n-gram hash 到固定维度向量里，适合 demo、测试和可重复部署，但不是生产级语义 embedding。
+
+项目也支持 OpenAI-compatible embedding API：
 
 ```text
 EMBEDDING_PROVIDER=api
@@ -61,216 +76,203 @@ EMBEDDING_API_KEY=...
 EMBEDDING_MODEL=...
 ```
 
-这是 OpenAI-compatible embedding 接口。可以接 Jina、Voyage、Cohere、SiliconFlow、OpenAI-compatible BGE 服务或自部署 embedding 服务。API 模式会批量请求 embedding，避免大语料时一次请求过大。
+可以接 Jina、Voyage、Cohere、SiliconFlow、OpenAI-compatible BGE 或自部署 embedding 服务。真正比较不同 embedding 的流程是：
 
-关键点：RAG 的技术含量不在于一定自己训练 embedding 模型，而在于根据业务文档设计切块、召回、重排、评估和更新策略。调用 embedding API 仍然可以是正式系统；自己搭检索策略才是核心。
+```text
+切换 embedding provider/model
+  -> /rag/reindex
+  -> /evals/rag-retrieval
+  -> 记录 Recall@K / MRR / latency / cost
+```
 
-## 5. 检索策略
+当前新增的 `/evals/embedding-benchmark` 会做 vector-only local baseline，对比 `local-hash-256`、`local-hash-384`、`local-hash-768`，用于说明 embedding 维度变化对召回的影响。完整线上质量仍以 `/evals/rag-retrieval` 为准，因为实际问答链路是 hybrid retrieval。
 
-当前 retriever 是混合检索：
+## 6. 向量数据库和 schema
+
+主存储：
+
+- `policy_documents`
+- `policy_chunks`
+- `policy_chunk_embeddings`
+
+pgvector mirror table：
+
+```text
+rag_vector_embeddings
+- id BIGSERIAL PRIMARY KEY
+- chunk_id INTEGER UNIQUE REFERENCES policy_chunks(id)
+- provider TEXT
+- model TEXT
+- dimensions INTEGER
+- embedding vector(384)
+- metadata JSONB
+- created_at TIMESTAMPTZ
+```
+
+索引：
+
+```sql
+USING hnsw (embedding vector_cosine_ops)
+```
+
+选择 HNSW + cosine 的原因：
+
+- 当前 embedding 都做了归一化，cosine 更合适。
+- HNSW 适合近似最近邻召回，后续 corpus 扩大时比全表扫描更稳。
+- PostgreSQL/pgvector 和已有 PostgreSQL 数据库部署在一起，系统复杂度比额外维护 Chroma、Milvus、Qdrant 更低。
+
+逻辑 partition 不是物理分表，而是通过 source metadata 分类：
+
+- `official_nyc311_articles`
+- `official_nyc_open_data`
+- `local_policy_docs`
+- `local_multimodal_assets`
+- `project_architecture_docs`
+- `other`
+
+可以通过：
+
+```text
+GET /rag/vector-store/schema
+```
+
+查看当前 collection、physical table、dimensions、index type、total vectors 和 logical partitions。
+
+## 7. 检索流程
+
+当前 retriever 是 hybrid retrieval：
 
 ```text
 用户问题
-  -> query expansion
+  -> 中文/英文 query expansion
   -> query embedding
+  -> pgvector vector recall，失败时 JSON cosine fallback
   -> BM25 lexical score
-  -> vector cosine score
   -> heading bonus
   -> phrase bonus
-  -> rerank score
+  -> source-aware bonus
+  -> lightweight knowledge-graph entity bonus
+  -> hybrid score
+  -> MMR 分组去重
   -> top_k evidence chunks
 ```
 
-### Query expansion
+最终分数大致来自：
 
-系统会把常见中文问法扩展成英文检索词。例如：
+- vector score
+- BM25 score
+- matched term density
+- heading overlap
+- phrase match
+- source type match
+- graph entity overlap
 
-```text
-怎么查询服务请求状态
-  -> service request / check / status / 311
-```
+MMR 用来避免 top chunks 全部来自同一篇文章或高度重复段落。每个 document 默认最多保留 2 个 chunk，剩下位置优先给其他来源。
 
-这解决了用户用中文提问，但官方 NYC311 文档主要是英文的问题。
+## 8. 知识图谱怎么用
 
-### BM25
+当前不是 Neo4j 这类完整图数据库，而是轻量 entity graph：
 
-BM25 负责关键词召回，适合：
+- NYC311 article id：例如 `KA-01066`
+- borough：Manhattan、Brooklyn、Queens、Bronx、Staten Island
+- agency：NYPD、DSNY、DOT、HPD、DOB、DEP、DOHMH
+- service topic：illegal parking、blocked driveway、noise、apartment maintenance、open data、safe SQL、human approval 等
 
-- 精确术语；
-- 字段名；
-- FAQ 标题；
-- kanumber 文章主题；
-- SQL/Open Data 这类专业词。
-
-### Vector similarity
-
-向量相似度负责语义召回，适合：
-
-- 问法和文档表达不完全一致；
-- 同义表达；
-- 长句问题；
-- 用户不知道官方术语。
-
-### Rerank score
-
-最终分数目前是：
+接口：
 
 ```text
-0.42 * vector_score
-+ 0.42 * bm25_score
-+ 0.08 * matched_term_density
-+ heading_bonus
-+ phrase_bonus
+GET /rag/knowledge-graph
 ```
 
-这个设计避免只依赖 embedding，也避免只靠关键词。真实生产系统可以继续接 cross-encoder reranker。
+它会返回 node、edge、mention count、example documents。检索时，如果 query entities 和 chunk entities 有交集，会给 chunk 一个小的 graph bonus。这个设计能提升可解释性，但不会把图谱信号压过 BM25 和 vector。
 
-## 6. 证据门控
+## 9. 证据门控和生成
 
-RAG 不会无条件回答。系统会检查 top evidence 是否足够强：
+RAG 不会无条件回答。系统会拒答这些情况：
 
-- 没有召回结果：拒答；
-- 关键词和向量信号都弱：拒答；
-- 用户问私人联系方式：拒答；
-- 证据足够：把 top chunks 塞给 LLM 生成答案，并返回 citations。
+- 没有召回结果。
+- top evidence lexical/vector 信号都太弱。
+- 用户询问私人联系方式等敏感信息。
 
-返回里会包含：
+证据足够时，系统把 top chunks 放入 prompt，让 DeepSeek 或 mock provider 生成答案，并返回 citation：
 
-- answer；
-- citations；
-- source URL；
-- chunk id；
-- heading；
-- snippet；
-- hybrid score；
-- vector score；
-- lexical score；
-- matched terms；
-- generation provider。
+- document title
+- source URL
+- chunk id
+- heading
+- snippet
+- hybrid score
+- vector score
+- vector backend
+- lexical score
+- graph entities
+- matched terms
 
-## 7. 和 SQL 的关系
+## 10. 评估
 
-SQL 和 RAG 不是互相替代。
-
-SQL 负责回答：
-
-- top complaint types；
-- open requests count；
-- borough distribution；
-- agency workload；
-- average resolution time；
-- latest data freshness。
-
-RAG 负责回答：
-
-- NYC311 如何查询 service request status；
-- 某类投诉应该去哪里提交；
-- 311 数据集字段是什么意思；
-- 系统为什么只允许 SELECT；
-- RAG 证据不足时为什么拒答；
-- 项目架构和安全边界。
-
-## 8. 数据更新
-
-SQL 数据每天更新：
+基础评估：
 
 ```text
-POST /ingestion/sync-latest
+POST /evals/run
 ```
 
-它根据数据库里最新 `created_date`，回看最近几天，重新拉取官方 NYC Open Data，按 `unique_key` upsert。这样可以覆盖新记录和近期状态变化。
+包括 SQL safety、RAG citation/refusal。
 
-RAG 文档定期刷新：
-
-```text
-POST /rag/reindex
-{
-  "include_remote": true,
-  "max_311_articles": 120
-}
-```
-
-它会重新抓官方目录、官方文章、Open Data 元数据和本地文档，然后重建 chunk 和 embedding。
-
-## 9. 当前边界
-
-当前版本已经从“少量 demo 文档”升级为“官方目录驱动的中等规模 RAG”。但仍有明确边界：
-
-- 线上仍默认 `local_hash`，除非配置真实 embedding API key。
-- 向量存储仍是 JSON + 应用层 cosine，几百到一两千 chunks 可以演示，真正大规模应迁移到 pgvector。
-- reindex 是同步 HTTP 请求，更大语料应改成后台任务。
-- PDF 官方源可能返回 403，系统会跳过并记录 warning。
-- 没有生产级登录鉴权，公开 demo 不能放敏感数据。
-
-## 10. 下一步可以怎么继续增强
-
-推荐优先级：
-
-1. 接真实 embedding provider，例如 Jina/Voyage/OpenAI-compatible BGE。
-2. 把 `policy_chunk_embeddings.vector` 迁移到 pgvector。
-3. 增加 cross-encoder reranker。
-4. 把 reindex 改成后台 job，支持抓取 500+ 或 1000+ 官方文章。
-5. 建一套 RAG eval set，评估 Recall@K、citation accuracy、faithfulness、refusal accuracy。
-
-## 11. 已新增的 RAG v2 工程入口
-
-当前新增了三个工程入口，用来把项目从 demo RAG 推向可评估、可扩展 RAG：
+检索评估：
 
 ```text
 POST /evals/rag-retrieval
-POST /evals/embedding-benchmark
-POST /rag/vector-store/init
 ```
 
-`/evals/rag-retrieval` 会根据 `evals/rag_retrieval_cases.json` 计算：
+使用 `evals/rag_retrieval_cases.json`，计算：
 
 - Recall@1
 - Recall@3
 - Recall@5
 - MRR
 
-`/evals/embedding-benchmark` 使用同一套检索评测，只是语义上用于不同 embedding provider 之间的对比。正确使用方式是：
+Embedding baseline：
 
 ```text
-切换 EMBEDDING_PROVIDER / EMBEDDING_MODEL
-  -> /rag/reindex
-  -> /evals/embedding-benchmark
-  -> 记录 Recall@K / MRR / latency / cost
+POST /evals/embedding-benchmark
 ```
 
-`/rag/vector-store/init` 会在 PostgreSQL 上创建 pgvector mirror table：
+当前对比 `local-hash-256/384/768` 的 vector-only ranking。这个接口用于研究 embedding 变化，不代表最终 hybrid RAG 的全部效果。
+
+线上最近验证过 `/evals/rag-retrieval`：10 个 gold case 的 Recall@1/3/5 和 MRR 都是 1.0。这个结果只说明当前小型 gold set 覆盖的场景通过了，不等于所有问题都 100% 正确。
+
+## 11. 数据更新
+
+SQL 数据每天同步：
 
 ```text
-rag_vector_embeddings
-  - chunk_id
-  - provider
-  - model
-  - dimensions
-  - embedding vector(...)
-  - metadata JSONB
+POST /ingestion/sync-latest
 ```
 
-并创建：
+它读取数据库里最新 `created_date`，回看最近几天，再从官方 NYC Open Data API 拉取并 upsert。这样可以覆盖新记录和近期状态变化。
 
-```sql
-USING hnsw (embedding vector_cosine_ops)
-```
-
-注意：当前 retriever 仍默认走 JSON vector + Python cosine 的兼容路径。pgvector 表和 HNSW index 已经可以初始化和回填，下一步才是把实际查询执行迁移到 SQL 里的 vector distance。
-
-## 12. 多模态摄取入口
-
-当前新增了本地多模态资产目录：
+RAG 文档每周刷新：
 
 ```text
-sample_data/rag_assets/
+POST /rag/reindex
+POST /rag/vector-store/init
 ```
 
-支持：
+GitHub Actions workflow：
 
-- PDF：用 `pypdf` 抽文字层；
-- 图片：优先读取 sidecar 文件，例如 `image.png.txt`、`image.png.ocr.txt`、`image.png.caption.md`；
-- 如果运行环境安装了 `Pillow` 和 `pytesseract`，会尝试 OCR；
-- 如果图片没有 OCR/caption 文本，会被索引为“待抽取”状态，但检索效果不会好。
+```text
+.github/workflows/daily-data-sync.yml
+```
 
-这一步是多模态 RAG 的 ingestion 基础，不等于已经完成真正的 image embedding。真正的多模态检索还需要接入 CLIP/Jina multimodal/其他 image-text shared embedding provider。
+- 每天触发 SQL 增量同步。
+- 每周一刷新官方 RAG 文档并重建 pgvector mirror。
+
+## 12. 当前边界
+
+- 线上默认还是 `local_hash`，不是生产级语义 embedding。
+- 多模态目前是 PDF 文本层 + 图片 OCR/caption 文本检索，不是真正 image embedding。
+- `reindex` 是同步 HTTP endpoint，大规模抓取 500+ 或 1000+ 文档时应改成后台队列。
+- public demo 暂时没有生产鉴权，真实系统需要保护 ingestion/reindex 这类 admin endpoint。
+- 当前知识图谱是轻量共现图，不是完整知识图谱存储。
+
+这版已经从“几段文本塞 prompt”升级成了：真实官方文档抓取、chunking、embedding、pgvector、BM25、graph-aware hybrid retrieval、MMR、citation、eval、daily sync 的完整 RAG 工程闭环。

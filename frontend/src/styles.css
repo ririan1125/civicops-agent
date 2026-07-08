@@ -283,6 +283,13 @@ textarea {
   align-items: stretch;
 }
 
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
 pre {
   white-space: pre-wrap;
   background: #17212b;

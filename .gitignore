@@ -30,4 +30,6 @@ generate_obsidian*.cjs
 docs/*.md
 !docs/ARCHITECTURE.md
 !docs/DEMO_SCRIPT.md
+!docs/DEPLOYMENT.md
 !docs/PROJECT_OVERVIEW_CN.md
+!docs/RAG_DESIGN.md

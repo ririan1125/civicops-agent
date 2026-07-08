@@ -28,3 +28,19 @@ class RAGRetrievalEvalResponse(BaseModel):
     cases: list[RAGRetrievalCaseResult]
     embedding_provider: str
     embedding_model: str
+
+
+class EmbeddingBenchmarkVariant(BaseModel):
+    provider: str
+    model: str
+    dimensions: int
+    metrics: list[EvalMetric]
+    cases: list[RAGRetrievalCaseResult]
+
+
+class EmbeddingBenchmarkResponse(BaseModel):
+    corpus_chunks: int
+    cases_count: int
+    best_variant: str | None = None
+    variants: list[EmbeddingBenchmarkVariant]
+    notes: list[str] = []

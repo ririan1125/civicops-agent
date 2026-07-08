@@ -1,7 +1,8 @@
 from app.services.rag.answerer import answer_rag_question
 from app.services.rag.indexer import index_policy_documents
+from app.services.rag.knowledge_graph import build_knowledge_graph
 from app.services.rag.retriever import expand_query, retrieve_chunks
-from app.services.rag.vector_store import initialize_pgvector_store
+from app.services.rag.vector_store import describe_vector_store, initialize_pgvector_store
 
 
 def test_rag_indexes_sample_documents_and_returns_citation(db_session) -> None:
@@ -12,9 +13,10 @@ def test_rag_indexes_sample_documents_and_returns_citation(db_session) -> None:
     response = answer_rag_question(db_session, "What SQL statements is the agent allowed to execute?")
     assert response.refused is False
     assert response.citations
-    assert response.retrieval_method == "hybrid_bm25_vector_rerank"
+    assert response.retrieval_method == "hybrid_bm25_json_vector_graph_mmr"
     assert response.generation_provider == "mock"
     assert response.citations[0].vector_score is not None
+    assert response.citations[0].vector_backend == "json"
 
 
 def test_rag_refuses_when_evidence_is_weak(db_session) -> None:
@@ -42,3 +44,18 @@ def test_pgvector_init_reports_unsupported_on_sqlite(db_session) -> None:
     result = initialize_pgvector_store(db_session)
     assert result["status"] == "unsupported"
     assert result["pgvector_enabled"] is False
+
+
+def test_vector_store_schema_reports_json_fallback_on_sqlite(db_session) -> None:
+    index_policy_documents(db_session)
+    result = describe_vector_store(db_session)
+    assert result["status"] == "unsupported"
+    assert result["physical_table"] == "policy_chunk_embeddings"
+    assert result["total_vectors"] > 0
+
+
+def test_knowledge_graph_builds_nodes_from_index(db_session) -> None:
+    index_policy_documents(db_session)
+    result = build_knowledge_graph(db_session)
+    assert result["chunks_scanned"] > 0
+    assert result["nodes"]

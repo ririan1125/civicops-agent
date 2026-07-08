@@ -85,6 +85,8 @@ const ragCitations = [
     score: 0.42,
     lexical_score: 0.31,
     vector_score: 0.49,
+    vector_backend: "json",
+    graph_entities: ["topic:safe_sql"],
     matched_terms: ["sql", "select", "execute"]
   },
   {
@@ -97,6 +99,8 @@ const ragCitations = [
     score: 0.34,
     lexical_score: 0.2,
     vector_score: 0.45,
+    vector_backend: "json",
+    graph_entities: ["topic:safe_sql", "topic:human_approval"],
     matched_terms: ["tool", "sql", "execution"]
   }
 ];
@@ -131,7 +135,7 @@ function ragResponse(question: string) {
     citations: ragCitations,
     confidence: 0.84,
     refused: false,
-    retrieval_method: "hybrid_bm25_vector_rerank",
+    retrieval_method: "hybrid_bm25_json_vector_graph_mmr",
     generation_provider: "mock",
     trace_id: 3
   };
@@ -211,6 +215,35 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
   if (path === "/rag/ask" && method === "POST") {
     return ragResponse(body.question || "What SQL statements is the agent allowed to execute?") as T;
   }
+  if (path === "/rag/vector-store/schema") {
+    return {
+      status: "unsupported",
+      backend: "demo",
+      pgvector_enabled: false,
+      collection_name: "policy_documents",
+      physical_table: "policy_chunk_embeddings",
+      embedding_provider: "local_hash",
+      embedding_model: "local-hash-384",
+      dimensions: 384,
+      index_type: "application_side_cosine",
+      total_vectors: 1802,
+      logical_partitions: [
+        { name: "official_nyc311_articles", chunk_count: 1200 },
+        { name: "official_nyc_open_data", chunk_count: 210 },
+        { name: "local_policy_docs", chunk_count: 92 }
+      ]
+    } as T;
+  }
+  if (path === "/rag/knowledge-graph") {
+    return {
+      chunks_scanned: 800,
+      nodes: [
+        { id: "topic:safe_sql", label: "Safe Sql", type: "topic", mentions: 8, example_documents: ["Civicops Agent Operating Policy"] },
+        { id: "topic:service_request_status", label: "Service Request Status", type: "topic", mentions: 12, example_documents: ["NYC311 Service Request Status"] }
+      ],
+      edges: [{ source: "topic:safe_sql", target: "topic:human_approval", weight: 3 }]
+    } as T;
+  }
   if (path === "/traces") {
     return traces as T;
   }
@@ -221,6 +254,42 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
         { name: "rag_citation_and_refusal_rate", passed: 3, total: 3, score: 1 }
       ],
       failures: []
+    } as T;
+  }
+  if (path === "/evals/rag-retrieval" && method === "POST") {
+    return {
+      metrics: [
+        { name: "rag_recall_at_1", passed: 10, total: 10, score: 1 },
+        { name: "rag_recall_at_3", passed: 10, total: 10, score: 1 },
+        { name: "rag_recall_at_5", passed: 10, total: 10, score: 1 },
+        { name: "rag_mrr", passed: 10, total: 10, score: 1 }
+      ],
+      cases: [
+        {
+          name: "safe_sql_policy",
+          question: "What SQL statements is the agent allowed to execute?",
+          expected: ["Safe SQL"],
+          retrieved: ["Civicops Agent Operating Policy | Safe SQL | sample_data/policies/civicops_agent_operating_policy.md"],
+          hit_rank: 1,
+          reciprocal_rank: 1,
+          top_score: 0.64
+        }
+      ],
+      embedding_provider: "local_hash",
+      embedding_model: "local-hash-384"
+    } as T;
+  }
+  if (path === "/evals/embedding-benchmark" && method === "POST") {
+    return {
+      corpus_chunks: 1802,
+      cases_count: 10,
+      best_variant: "local-hash-384",
+      variants: [
+        { provider: "local_hash", model: "local-hash-256", dimensions: 256, metrics: [{ name: "rag_mrr", passed: 8.8, total: 10, score: 0.88 }, { name: "rag_recall_at_1", passed: 8, total: 10, score: 0.8 }] },
+        { provider: "local_hash", model: "local-hash-384", dimensions: 384, metrics: [{ name: "rag_mrr", passed: 9.2, total: 10, score: 0.92 }, { name: "rag_recall_at_1", passed: 9, total: 10, score: 0.9 }] },
+        { provider: "local_hash", model: "local-hash-768", dimensions: 768, metrics: [{ name: "rag_mrr", passed: 9.1, total: 10, score: 0.91 }, { name: "rag_recall_at_1", passed: 9, total: 10, score: 0.9 }] }
+      ],
+      notes: ["Demo benchmark data."]
     } as T;
   }
   throw new Error(`Demo API route is not implemented: ${method} ${path}`);
