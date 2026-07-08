@@ -129,9 +129,9 @@ The RAG pipeline handles unstructured and semi-structured documents.
 Flow:
 
 ```text
-Local project docs + official NYC311/Open Data sources
+Local project docs + local multimodal assets + official NYC311/Open Data sources
   -> official NYC311 article discovery
-  -> HTML/PDF/JSON source loading
+  -> HTML/PDF/JSON/image source loading
   -> markdown-like text normalization
   -> heading-aware chunking
   -> embeddings
@@ -145,6 +145,7 @@ Current source categories:
 
 - local operating policy docs in `sample_data/policies/`;
 - project architecture docs in `docs/`;
+- local PDF and image assets in `sample_data/rag_assets/`;
 - official NYC311 service request and status pages;
 - official NYC311 `article/?kanumber=KA-xxxxx` pages discovered from the NYC311 report-problems directory;
 - official NYC 311 dataset metadata from Socrata;
@@ -152,6 +153,13 @@ Current source categories:
 - optional official NYC Open Data PDF sources when the city host allows backend download.
 
 The official PDF host can return 403 to automated backend clients. For stability, the system indexes the official GitHub Pages version of the Technical Standards Manual and keeps PDF URLs as optional sources. If the PDF fetch succeeds, extracted PDF text is indexed too.
+
+Local multimodal assets are supported through `sample_data/rag_assets/`:
+
+- text-layer PDFs are extracted with `pypdf`;
+- image files can be made searchable with sidecar OCR/caption files such as `image.png.txt`, `image.png.ocr.txt`, or `image.png.caption.md`;
+- if `Pillow` and `pytesseract` are available in the runtime, image OCR is attempted;
+- image-only files without OCR/caption text are indexed with an extraction-status note, but they will not retrieve well until OCR or caption text is provided.
 
 The default live reindex crawls up to 120 official NYC311 article pages. This is controlled by:
 
@@ -211,8 +219,11 @@ This should route to RAG.
 | `GET /rag/sources` | List configured official remote RAG sources |
 | `POST /rag/reindex` | Rebuild local and official document index |
 | `POST /rag/ask` | Hybrid RAG question answering |
+| `POST /rag/vector-store/init` | Optional PostgreSQL pgvector table, backfill, and HNSW index initialization |
 | `GET /traces` | Execution trace history |
 | `POST /evals/run` | SQL/RAG evaluation suite |
+| `POST /evals/rag-retrieval` | Retrieval Recall@K and MRR evaluation |
+| `POST /evals/embedding-benchmark` | Same retrieval benchmark for the currently indexed embedding provider |
 
 ## Local Development
 
@@ -297,11 +308,49 @@ Never commit real API keys.
 
 `local_hash` is a no-key fallback for reproducible demos and tests. For production-quality semantic retrieval, configure an OpenAI-compatible embedding service such as Jina, Voyage, Cohere, OpenAI-compatible BGE, SiliconFlow, or a self-hosted embedding endpoint.
 
+Embedding comparison flow:
+
+```text
+1. Set EMBEDDING_PROVIDER / EMBEDDING_MODEL / EMBEDDING_API_KEY.
+2. Run POST /rag/reindex.
+3. Run POST /evals/embedding-benchmark.
+4. Compare Recall@1, Recall@3, Recall@5, MRR, latency, and cost across runs.
+```
+
+## Optional pgvector Store
+
+The default portable store keeps vectors in JSON and scores them in application code. PostgreSQL deployments can initialize a pgvector mirror table:
+
+```text
+POST /rag/vector-store/init
+```
+
+This creates:
+
+```text
+rag_vector_embeddings
+- chunk_id
+- provider
+- model
+- dimensions
+- embedding vector(...)
+- metadata JSONB
+```
+
+It also creates an HNSW cosine index:
+
+```sql
+USING hnsw (embedding vector_cosine_ops)
+```
+
+The current retriever still uses the portable JSON scoring path; this endpoint prepares the database schema and backfills vectors so the next step can switch retrieval execution to pgvector without changing the ingestion pipeline again.
+
 ## Current Boundaries
 
 - No production authentication yet.
 - Public admin-like endpoints are acceptable for this demo, but should be protected before real use.
-- Vector storage uses JSON vectors and application-side cosine scoring; larger corpora should use pgvector or a vector database.
+- Vector storage still uses JSON vectors and application-side cosine scoring by default; `POST /rag/vector-store/init` prepares a pgvector mirror table and HNSW index on PostgreSQL.
+- Multimodal support currently means text extraction from PDFs plus OCR/caption text ingestion for images; true image embeddings require a multimodal embedding provider.
 - RAG reindex is currently a synchronous admin endpoint; very large crawls should move to a background job queue.
 - Render free tier can sleep.
 - The system can stay fresh with NYC Open Data, but cannot exceed the upstream update cadence.

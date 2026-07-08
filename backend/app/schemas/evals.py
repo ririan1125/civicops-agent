@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class EvalMetric(BaseModel):
     name: str
-    passed: int
+    passed: int | float
     total: int
     score: float
 
@@ -11,3 +11,20 @@ class EvalMetric(BaseModel):
 class EvalRunResponse(BaseModel):
     metrics: list[EvalMetric]
     failures: list[dict]
+
+
+class RAGRetrievalCaseResult(BaseModel):
+    name: str
+    question: str
+    expected: list[str]
+    retrieved: list[str]
+    hit_rank: int | None
+    reciprocal_rank: float
+    top_score: float | None = None
+
+
+class RAGRetrievalEvalResponse(BaseModel):
+    metrics: list[EvalMetric]
+    cases: list[RAGRetrievalCaseResult]
+    embedding_provider: str
+    embedding_model: str

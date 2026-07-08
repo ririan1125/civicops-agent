@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.schemas.rag import RAGAskRequest, RAGAskResponse, RAGSourceInfo, ReindexRequest, ReindexResponse
+from app.schemas.rag import RAGAskRequest, RAGAskResponse, RAGSourceInfo, ReindexRequest, ReindexResponse, VectorStoreInitResponse
 from app.services.rag.answerer import answer_rag_question
 from app.services.rag.embeddings import embedding_runtime_label
 from app.services.rag.indexer import index_policy_documents
 from app.services.rag.source_loader import available_remote_sources
+from app.services.rag.vector_store import initialize_pgvector_store
 from app.services.tracing.trace_service import record_trace, timed_call
 
 router = APIRouter(prefix="/rag", tags=["rag"])
@@ -52,3 +53,8 @@ def ask_rag(request: RAGAskRequest, db: Session = Depends(get_session)) -> RAGAs
     )
     response.trace_id = trace.id
     return response
+
+
+@router.post("/vector-store/init", response_model=VectorStoreInitResponse)
+def init_vector_store(db: Session = Depends(get_session)) -> VectorStoreInitResponse:
+    return VectorStoreInitResponse(**initialize_pgvector_store(db))

@@ -1,0 +1,52 @@
+[
+  {
+    "name": "nyc311_status_lookup",
+    "question": "How do I check a NYC311 service request status?",
+    "expected": ["KA-01066", "check-status", "Service Request Status"]
+  },
+  {
+    "name": "illegal_parking_article",
+    "question": "How do I report illegal parking through NYC311?",
+    "expected": ["KA-01986", "Illegal Parking"]
+  },
+  {
+    "name": "noise_neighbor_article",
+    "question": "Where is the NYC311 guidance for noise from a neighbor?",
+    "expected": ["KA-01017", "Noise from Neighbor"]
+  },
+  {
+    "name": "apartment_maintenance_article",
+    "question": "What NYC311 article covers apartment maintenance complaints?",
+    "expected": ["KA-01074", "Apartment Maintenance"]
+  },
+  {
+    "name": "blocked_driveway_article",
+    "question": "What should I use for a blocked driveway complaint?",
+    "expected": ["KA-01062", "Blocked Driveway"]
+  },
+  {
+    "name": "dataset_api_columns",
+    "question": "What does the 311 dataset metadata say about API columns?",
+    "expected": ["erm2-nwe9", "API Columns", "Dataset Metadata"]
+  },
+  {
+    "name": "open_data_standards",
+    "question": "Where does the project index NYC Open Data technical standards?",
+    "expected": ["opendatatsm", "Technical Standards"]
+  },
+  {
+    "name": "safe_sql_policy",
+    "question": "What SQL statements is the agent allowed to execute?",
+    "expected": ["Safe SQL", "Operating Policy"]
+  },
+  {
+    "name": "human_approval_policy",
+    "question": "When is human approval required for recommendations?",
+    "expected": ["Human In The Loop", "Operating Policy"]
+  },
+  {
+    "name": "rag_weak_evidence_policy",
+    "question": "What should the assistant do when RAG evidence is weak?",
+    "expected": ["RAG Answering Policy", "Service Guidance"]
+  }
+]

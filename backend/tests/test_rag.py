@@ -1,6 +1,7 @@
 from app.services.rag.answerer import answer_rag_question
 from app.services.rag.indexer import index_policy_documents
 from app.services.rag.retriever import expand_query, retrieve_chunks
+from app.services.rag.vector_store import initialize_pgvector_store
 
 
 def test_rag_indexes_sample_documents_and_returns_citation(db_session) -> None:
@@ -32,6 +33,12 @@ def test_hybrid_retriever_returns_scored_chunks(db_session) -> None:
 
 
 def test_query_expansion_supports_chinese_service_request_status() -> None:
-    expanded = expand_query("怎么查询服务请求状态")
+    expanded = expand_query("\u600e\u4e48\u67e5\u8be2\u670d\u52a1\u8bf7\u6c42\u72b6\u6001")
     assert "service request" in expanded
     assert "status" in expanded
+
+
+def test_pgvector_init_reports_unsupported_on_sqlite(db_session) -> None:
+    result = initialize_pgvector_store(db_session)
+    assert result["status"] == "unsupported"
+    assert result["pgvector_enabled"] is False

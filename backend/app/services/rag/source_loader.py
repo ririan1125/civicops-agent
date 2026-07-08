@@ -125,6 +125,10 @@ def sample_policy_dir() -> Path:
     return repo_root() / "sample_data" / "policies"
 
 
+def local_rag_asset_dir() -> Path:
+    return repo_root() / "sample_data" / "rag_assets"
+
+
 def available_remote_sources() -> list[dict[str, Any]]:
     static_sources = [
         {
@@ -204,6 +208,83 @@ def _load_local_project_sources() -> list[DocumentSource]:
                 source_type="project_markdown",
             )
         )
+    return sources
+
+
+def _sidecar_text(path: Path) -> str:
+    candidates = [
+        path.with_suffix(path.suffix + ".txt"),
+        path.with_suffix(path.suffix + ".ocr.txt"),
+        path.with_suffix(path.suffix + ".caption.md"),
+        path.with_suffix(".txt"),
+    ]
+    blocks: list[str] = []
+    for candidate in candidates:
+        if candidate.exists():
+            blocks.append(candidate.read_text(encoding="utf-8", errors="ignore"))
+    return _compact_text("\n\n".join(blocks))
+
+
+def _extract_local_image_markdown(path: Path) -> str:
+    blocks = [
+        f"# {path.stem.replace('_', ' ').replace('-', ' ').title()}",
+        f"Source file: {path}",
+        "Modality: image",
+    ]
+    sidecar = _sidecar_text(path)
+    if sidecar:
+        blocks.append("\n## OCR Or Caption Sidecar")
+        blocks.append(sidecar)
+    else:
+        try:
+            from PIL import Image
+            import pytesseract
+
+            ocr_text = _compact_text(pytesseract.image_to_string(Image.open(path)))
+            if ocr_text:
+                blocks.append("\n## OCR Text")
+                blocks.append(ocr_text)
+        except Exception:
+            blocks.append(
+                "\n## Extraction Status\n"
+                "No OCR or caption text is available for this image. Add a sidecar file such as "
+                f"`{path.name}.txt` or configure an OCR/caption provider before expecting this image to be searchable."
+            )
+    return _compact_text("\n".join(blocks))
+
+
+def _load_local_asset_sources() -> list[DocumentSource]:
+    directory = local_rag_asset_dir()
+    if not directory.exists():
+        return []
+
+    sources: list[DocumentSource] = []
+    for path in sorted(directory.rglob("*")):
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix == ".pdf":
+            try:
+                content = _extract_pdf_markdown(path.read_bytes(), path.stem.replace("_", " ").title(), str(path), max_chars=60000)
+            except Exception as exc:
+                content = f"# {path.stem}\nSource file: {path}\nModality: pdf\nExtraction failed: {exc}"
+            sources.append(
+                DocumentSource(
+                    title=path.stem.replace("_", " ").replace("-", " ").title(),
+                    source_path=str(path),
+                    content=content,
+                    source_type="local_pdf",
+                )
+            )
+        elif suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+            sources.append(
+                DocumentSource(
+                    title=path.stem.replace("_", " ").replace("-", " ").title(),
+                    source_path=str(path),
+                    content=_extract_local_image_markdown(path),
+                    source_type="local_image",
+                )
+            )
     return sources
 
 
@@ -389,7 +470,7 @@ def _fetch_remote_source_once(source: RemoteSource, headers: dict[str, str], tim
 
 def load_document_sources(include_remote: bool = False, max_311_articles: int | None = None) -> SourceLoadResult:
     settings = get_settings()
-    sources = _load_local_policy_sources() + _load_local_project_sources()
+    sources = _load_local_policy_sources() + _load_local_project_sources() + _load_local_asset_sources()
     warnings: list[str] = []
     if not include_remote:
         return SourceLoadResult(sources=sources, warnings=warnings)

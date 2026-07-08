@@ -50,41 +50,41 @@ STOPWORDS = {
     "my",
     "you",
     "your",
-    "请",
-    "我",
-    "的",
-    "了",
-    "是",
-    "吗",
-    "么",
-    "什么",
-    "怎么",
-    "如何",
-    "一个",
+    "\u8bf7",
+    "\u6211",
+    "\u7684",
+    "\u4e86",
+    "\u662f",
+    "\u5417",
+    "\u4e48",
+    "\u4ec0\u4e48",
+    "\u600e\u4e48",
+    "\u5982\u4f55",
+    "\u4e00\u4e2a",
 }
 
 
 QUERY_EXPANSIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("服务请求", ("service", "request", "service request", "311")),
-    ("查询状态", ("check", "status", "service request status")),
-    ("状态", ("status", "service request status")),
-    ("投诉", ("complaint", "report", "problem")),
-    ("噪音", ("noise", "neighbor", "residential")),
-    ("停车", ("parking", "illegal parking", "blocked driveway")),
-    ("垃圾", ("garbage", "sanitation", "trash")),
-    ("维修", ("maintenance", "repair")),
-    ("公寓", ("apartment", "housing")),
-    ("供暖", ("heat", "hot water")),
-    ("热水", ("hot water", "heat")),
-    ("开放数据", ("open data", "dataset", "metadata")),
-    ("数据集", ("dataset", "metadata", "columns")),
-    ("字段", ("field", "column", "metadata")),
-    ("政策", ("policy", "governance", "standard")),
-    ("流程", ("process", "procedure", "request")),
-    ("引用", ("citation", "source", "evidence")),
-    ("证据", ("evidence", "source", "citation")),
+    ("\u670d\u52a1\u8bf7\u6c42", ("service", "request", "service request", "311")),
+    ("\u67e5\u8be2\u72b6\u6001", ("check", "status", "service request status")),
+    ("\u72b6\u6001", ("status", "service request status")),
+    ("\u6295\u8bc9", ("complaint", "report", "problem")),
+    ("\u566a\u97f3", ("noise", "neighbor", "residential")),
+    ("\u505c\u8f66", ("parking", "illegal parking", "blocked driveway")),
+    ("\u5783\u573e", ("garbage", "sanitation", "trash")),
+    ("\u7ef4\u4fee", ("maintenance", "repair")),
+    ("\u516c\u5bd3", ("apartment", "housing")),
+    ("\u4f9b\u6696", ("heat", "hot water")),
+    ("\u70ed\u6c34", ("hot water", "heat")),
+    ("\u5f00\u653e\u6570\u636e", ("open data", "dataset", "metadata")),
+    ("\u6570\u636e\u96c6", ("dataset", "metadata", "columns")),
+    ("\u5b57\u6bb5", ("field", "column", "metadata")),
+    ("\u653f\u7b56", ("policy", "governance", "standard")),
+    ("\u6d41\u7a0b", ("process", "procedure", "request")),
+    ("\u5f15\u7528", ("citation", "source", "evidence")),
+    ("\u8bc1\u636e", ("evidence", "source", "citation")),
     ("sql", ("sql", "select", "query")),
-    ("安全", ("safety", "safe", "guardrail")),
+    ("\u5b89\u5168", ("safety", "safe", "guardrail")),
 )
 
 
@@ -120,7 +120,13 @@ def _chunk_tokens(chunk: PolicyChunk) -> list[str]:
     return heading_tokens * 3 + content_tokens
 
 
-def _bm25_score(query_terms: list[str], document_terms: list[str], document_frequency: Counter[str], doc_count: int, avg_doc_len: float) -> float:
+def _bm25_score(
+    query_terms: list[str],
+    document_terms: list[str],
+    document_frequency: Counter[str],
+    doc_count: int,
+    avg_doc_len: float,
+) -> float:
     if not query_terms or not document_terms:
         return 0.0
     term_frequency = Counter(document_terms)
@@ -187,7 +193,7 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
     for tokens in tokenized_chunks:
         document_frequency.update(set(tokens))
 
-    raw_items: list[tuple[PolicyChunk, list[str], float, float, list[str], float, float]] = []
+    raw_items: list[tuple[PolicyChunk, float, float, list[str], float, float]] = []
     max_bm25 = 0.0
     query_term_set = set(query_terms)
     for chunk, chunk_terms in zip(chunks, tokenized_chunks):
@@ -197,10 +203,10 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
         matched = _matched_terms(query_terms, chunk_terms)
         heading_bonus = _heading_bonus(query_term_set, chunk.heading)
         phrase_bonus = _phrase_bonus(question, chunk.content)
-        raw_items.append((chunk, chunk_terms, bm25, vector, matched, heading_bonus, phrase_bonus))
+        raw_items.append((chunk, bm25, vector, matched, heading_bonus, phrase_bonus))
 
     scored: list[RetrievedChunk] = []
-    for chunk, chunk_terms, bm25, vector, matched, heading_bonus, phrase_bonus in raw_items:
+    for chunk, bm25, vector, matched, heading_bonus, phrase_bonus in raw_items:
         lexical = round(bm25 / max_bm25, 4) if max_bm25 > 0 else 0.0
         match_density = len(matched) / max(1, len(set(query_terms)))
         score = round((0.42 * vector) + (0.42 * lexical) + (0.08 * match_density) + heading_bonus + phrase_bonus, 4)

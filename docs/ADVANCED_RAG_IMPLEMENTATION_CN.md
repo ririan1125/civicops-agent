@@ -211,3 +211,66 @@ POST /rag/reindex
 3. 增加 cross-encoder reranker。
 4. 把 reindex 改成后台 job，支持抓取 500+ 或 1000+ 官方文章。
 5. 建一套 RAG eval set，评估 Recall@K、citation accuracy、faithfulness、refusal accuracy。
+
+## 11. 已新增的 RAG v2 工程入口
+
+当前新增了三个工程入口，用来把项目从 demo RAG 推向可评估、可扩展 RAG：
+
+```text
+POST /evals/rag-retrieval
+POST /evals/embedding-benchmark
+POST /rag/vector-store/init
+```
+
+`/evals/rag-retrieval` 会根据 `evals/rag_retrieval_cases.json` 计算：
+
+- Recall@1
+- Recall@3
+- Recall@5
+- MRR
+
+`/evals/embedding-benchmark` 使用同一套检索评测，只是语义上用于不同 embedding provider 之间的对比。正确使用方式是：
+
+```text
+切换 EMBEDDING_PROVIDER / EMBEDDING_MODEL
+  -> /rag/reindex
+  -> /evals/embedding-benchmark
+  -> 记录 Recall@K / MRR / latency / cost
+```
+
+`/rag/vector-store/init` 会在 PostgreSQL 上创建 pgvector mirror table：
+
+```text
+rag_vector_embeddings
+  - chunk_id
+  - provider
+  - model
+  - dimensions
+  - embedding vector(...)
+  - metadata JSONB
+```
+
+并创建：
+
+```sql
+USING hnsw (embedding vector_cosine_ops)
+```
+
+注意：当前 retriever 仍默认走 JSON vector + Python cosine 的兼容路径。pgvector 表和 HNSW index 已经可以初始化和回填，下一步才是把实际查询执行迁移到 SQL 里的 vector distance。
+
+## 12. 多模态摄取入口
+
+当前新增了本地多模态资产目录：
+
+```text
+sample_data/rag_assets/
+```
+
+支持：
+
+- PDF：用 `pypdf` 抽文字层；
+- 图片：优先读取 sidecar 文件，例如 `image.png.txt`、`image.png.ocr.txt`、`image.png.caption.md`；
+- 如果运行环境安装了 `Pillow` 和 `pytesseract`，会尝试 OCR；
+- 如果图片没有 OCR/caption 文本，会被索引为“待抽取”状态，但检索效果不会好。
+
+这一步是多模态 RAG 的 ingestion 基础，不等于已经完成真正的 image embedding。真正的多模态检索还需要接入 CLIP/Jina multimodal/其他 image-text shared embedding provider。

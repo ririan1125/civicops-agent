@@ -11,6 +11,16 @@ class ReindexResponse(BaseModel):
     warnings: list[str] = []
 
 
+class VectorStoreInitResponse(BaseModel):
+    status: str
+    backend: str
+    pgvector_enabled: bool
+    dimensions: int | None = None
+    index_type: str | None = None
+    rows_backfilled: int = 0
+    message: str
+
+
 class ReindexRequest(BaseModel):
     include_remote: bool = True
     max_311_articles: int | None = Field(default=None, ge=0, le=300)
