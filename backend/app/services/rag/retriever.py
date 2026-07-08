@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import joinedload
 
 from app.db.models import PolicyChunk
 from app.services.rag.embeddings import EmbeddingProviderError, cosine_similarity, embed_query
@@ -182,7 +183,7 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
     except EmbeddingProviderError:
         query_embedding = []
 
-    chunks = db.query(PolicyChunk).all()
+    chunks = db.query(PolicyChunk).options(joinedload(PolicyChunk.embedding), joinedload(PolicyChunk.document)).all()
     if not chunks:
         return []
 
