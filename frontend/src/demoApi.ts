@@ -86,6 +86,9 @@ const ragCitations = [
     lexical_score: 0.31,
     vector_score: 0.49,
     vector_backend: "json",
+    reranker_score: 0.08,
+    sparse_score: 0.62,
+    source_partition: "local_policy_docs",
     graph_entities: ["topic:safe_sql"],
     matched_terms: ["sql", "select", "execute"]
   },
@@ -100,6 +103,9 @@ const ragCitations = [
     lexical_score: 0.2,
     vector_score: 0.45,
     vector_backend: "json",
+    reranker_score: 0.05,
+    sparse_score: 0.4,
+    source_partition: "local_policy_docs",
     graph_entities: ["topic:safe_sql", "topic:human_approval"],
     matched_terms: ["tool", "sql", "execution"]
   }
@@ -156,6 +162,7 @@ function ragResponse(question: string) {
     refused: false,
     retrieval_method: "hybrid_bm25_json_vector_graph_mmr",
     generation_provider: "mock",
+    query_plan: { strategy: "hybrid", filters: {}, expansions: [] },
     trace_id: 3
   };
 }

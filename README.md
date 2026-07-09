@@ -170,11 +170,11 @@ RAG_MAX_311_ARTICLES=120
 RAG_REMOTE_CONCURRENCY=6
 ```
 
-Retrieval is not direct context stuffing. The backend computes query expansion, BM25 lexical scores, vector cosine scores, source-aware bonuses, knowledge-graph entity bonuses, and a reranked hybrid score before sending evidence to the chat model. PostgreSQL deployments use `rag_vector_embeddings` with pgvector/HNSW for vector recall; SQLite or uninitialized deployments fall back to JSON vectors and application-side cosine.
+Retrieval is not direct context stuffing. The backend computes a query plan, query expansion, BM25 lexical scores, persisted sparse term overlap, vector cosine scores, source-aware bonuses, knowledge-graph entity bonuses, heuristic reranker scores, and an MMR-diversified hybrid score before sending evidence to the chat model. PostgreSQL deployments use `rag_vector_embeddings` with pgvector/HNSW for vector recall; SQLite or uninitialized deployments fall back to JSON vectors and application-side cosine.
 
 Chinese questions also get query-expansion terms for common NYC311 concepts such as service request status, complaints, Open Data metadata, and SQL safety.
 
-RAG answers return answer text, citations, source URL, chunk id, heading, snippet, hybrid score, vector score, vector backend, lexical score, graph entities, matched terms, confidence, generation provider, and trace id.
+RAG answers return answer text, citations, source URL, chunk id, heading, snippet, hybrid score, vector score, vector backend, lexical score, sparse score, reranker score, source partition, graph entities, matched terms, query plan, confidence, generation provider, and trace id.
 
 ## Agent Routing
 
@@ -328,6 +328,8 @@ EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 Never commit real API keys.
 
 The deployed RAG pipeline uses the open-source BGE model through FastEmbed/ONNX, not the old deterministic hash vectors. `local_hash` remains only as a fast deterministic test fallback. For full-corpus refreshes on small cloud instances, the recommended path is to compute BGE document embeddings locally with `backend/scripts/build_and_upload_rag_index.py` and import the precomputed vectors into PostgreSQL/pgvector. Query-time embedding still runs in the deployed backend with the same BGE model.
+
+RAG V2 adds persisted sparse term features, metadata-aware query planning, configurable hybrid weights, heuristic reranking, richer retrieval metrics, and source partition reporting. It is still intentionally not claiming Milvus sparse-vector storage, Neo4j Graph RAG, or true image embedding; those remain clear extension points.
 
 Embedding comparison flow:
 

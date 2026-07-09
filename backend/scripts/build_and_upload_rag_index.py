@@ -12,6 +12,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.services.rag.chunker import chunk_markdown
 from app.services.rag.embeddings import embed_texts
+from app.services.rag.sparse import sparse_terms_for_text
 from app.services.rag.source_loader import load_document_sources
 
 
@@ -42,8 +43,11 @@ def build_payload(include_remote: bool, max_311_articles: int | None) -> dict:
                 "chunks": [
                     {
                         "heading": chunk.heading,
+                        "parent_heading": chunk.parent_heading,
+                        "section_path": chunk.section_path or [],
                         "content": chunk.content,
                         "token_count": chunk.token_count,
+                        "sparse_terms": sparse_terms_for_text(chunk.heading, chunk.content),
                         "embedding": embeddings.vectors[index],
                     }
                     for index, chunk in enumerate(chunks)

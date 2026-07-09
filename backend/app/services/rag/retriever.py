@@ -1,14 +1,19 @@
 import math
 import re
 from collections import Counter
+from dataclasses import asdict
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 
+from app.core.config import get_settings
 from app.db.models import PolicyChunk
 from app.services.rag.embeddings import EmbeddingProviderError, cosine_similarity, embed_query, embedding_runtime_label
 from app.services.rag.knowledge_graph import extract_text_entities
+from app.services.rag.query_planner import RAGQueryPlan, build_query_plan
+from app.services.rag.reranker import heuristic_rerank_score
+from app.services.rag.text_processing import tokenize
 from app.services.rag.vector_store import search_pgvector
 
 
@@ -21,52 +26,9 @@ class RetrievedChunk:
     matched_terms: list[str]
     vector_backend: str = "json"
     graph_entities: list[str] | None = None
-
-
-STOPWORDS = {
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "to",
-    "of",
-    "in",
-    "for",
-    "is",
-    "are",
-    "be",
-    "with",
-    "by",
-    "on",
-    "from",
-    "what",
-    "how",
-    "why",
-    "when",
-    "where",
-    "which",
-    "should",
-    "can",
-    "do",
-    "does",
-    "i",
-    "me",
-    "my",
-    "you",
-    "your",
-    "\u8bf7",
-    "\u6211",
-    "\u7684",
-    "\u4e86",
-    "\u662f",
-    "\u5417",
-    "\u4e48",
-    "\u4ec0\u4e48",
-    "\u600e\u4e48",
-    "\u5982\u4f55",
-    "\u4e00\u4e2a",
-}
+    reranker_score: float = 0.0
+    sparse_score: float = 0.0
+    query_plan: dict | None = None
 
 
 QUERY_EXPANSIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -93,9 +55,6 @@ QUERY_EXPANSIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]+")
-
-
 def expand_query(question: str) -> str:
     normalized = question.lower()
     additions: list[str] = []
@@ -107,22 +66,17 @@ def expand_query(question: str) -> str:
     return question
 
 
-def tokenize(text: str) -> list[str]:
-    raw_tokens = TOKEN_PATTERN.findall(text.lower())
-    tokens: list[str] = []
-    for token in raw_tokens:
-        if token in STOPWORDS:
-            continue
-        if len(token.strip()) == 0:
-            continue
-        tokens.append(token)
-    return tokens
-
-
 def _chunk_tokens(chunk: PolicyChunk) -> list[str]:
     heading_tokens = tokenize(chunk.heading or "")
     content_tokens = tokenize(chunk.content)
     return heading_tokens * 3 + content_tokens
+
+
+def _chunk_sparse_terms(chunk: PolicyChunk) -> dict[str, int]:
+    sparse_terms = chunk.sparse_terms or {}
+    if isinstance(sparse_terms, dict) and sparse_terms:
+        return {str(term): int(count) for term, count in sparse_terms.items()}
+    return Counter(_chunk_tokens(chunk))
 
 
 def _bm25_score(
@@ -201,6 +155,17 @@ def _source_bonus(question: str, chunk: PolicyChunk) -> float:
     return 0.0
 
 
+def _metadata_bonus(plan: RAGQueryPlan, chunk: PolicyChunk) -> float:
+    metadata = chunk.chunk_metadata or {}
+    bonus = 0.0
+    prefer_partition = plan.filters.get("prefer_partition")
+    if prefer_partition and metadata.get("logical_partition") == prefer_partition:
+        bonus += 0.05
+    if plan.filters.get("prefer_official") and metadata.get("is_remote"):
+        bonus += 0.03
+    return min(0.08, bonus)
+
+
 def _matched_terms(query_terms: list[str], document_terms: list[str]) -> list[str]:
     return sorted(set(query_terms) & set(document_terms))
 
@@ -244,7 +209,9 @@ def _select_diverse(candidates: list[RetrievedChunk], tokenized_by_chunk_id: dic
 
 
 def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: int = 60) -> list[RetrievedChunk]:
-    expanded_question = expand_query(question)
+    settings = get_settings()
+    plan = build_query_plan(question)
+    expanded_question = expand_query(plan.rewritten_query)
     query_terms = tokenize(expanded_question)
     if not query_terms:
         return []
@@ -274,7 +241,7 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
     for tokens in tokenized_chunks:
         document_frequency.update(set(tokens))
 
-    raw_items: list[tuple[PolicyChunk, float, float, list[str], float, float, float, list[str], float]] = []
+    raw_items: list[tuple[PolicyChunk, float, float, list[str], float, float, float, list[str], float, float, float]] = []
     max_bm25 = 0.0
     query_term_set = set(query_terms)
     query_entities = extract_text_entities(expanded_question)
@@ -298,19 +265,64 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
         phrase_bonus = _phrase_bonus(question, chunk.content)
         graph_bonus, graph_entities = _graph_bonus(query_entities, chunk)
         source_bonus = _source_bonus(expanded_question, chunk)
-        raw_items.append((chunk, bm25, vector, matched, heading_bonus, phrase_bonus, graph_bonus, graph_entities, source_bonus))
+        metadata_bonus = _metadata_bonus(plan, chunk)
+        sparse_terms = _chunk_sparse_terms(chunk)
+        sparse_overlap = sum(sparse_terms.get(term, 0) for term in set(query_terms))
+        sparse_score = min(1.0, sparse_overlap / max(1, len(set(query_terms)) * 2))
+        raw_items.append(
+            (
+                chunk,
+                bm25,
+                vector,
+                matched,
+                heading_bonus,
+                phrase_bonus,
+                graph_bonus,
+                graph_entities,
+                source_bonus,
+                metadata_bonus,
+                sparse_score,
+            )
+        )
 
     scored: list[RetrievedChunk] = []
-    for chunk, bm25, vector, matched, heading_bonus, phrase_bonus, graph_bonus, graph_entities, source_bonus in raw_items:
+    for (
+        chunk,
+        bm25,
+        vector,
+        matched,
+        heading_bonus,
+        phrase_bonus,
+        graph_bonus,
+        graph_entities,
+        source_bonus,
+        metadata_bonus,
+        sparse_score,
+    ) in raw_items:
         lexical = round(bm25 / max_bm25, 4) if max_bm25 > 0 else 0.0
         match_density = len(matched) / max(1, len(set(query_terms)))
+        reranker_score = (
+            heuristic_rerank_score(
+                question=question,
+                heading=chunk.heading,
+                content=chunk.content,
+                document_title=chunk.document.title if chunk.document else "",
+                metadata=chunk.chunk_metadata,
+                matched_terms=matched,
+                plan=plan,
+            )
+            if settings.rag_reranker_enabled
+            else 0.0
+        )
         score = round(
-            (0.38 * vector)
-            + (0.38 * lexical)
-            + (0.08 * match_density)
+            (settings.rag_vector_weight * vector)
+            + (settings.rag_lexical_weight * lexical)
+            + (settings.rag_sparse_weight * max(match_density, sparse_score))
+            + (settings.rag_reranker_weight * reranker_score)
             + heading_bonus
             + phrase_bonus
             + graph_bonus
+            + metadata_bonus
             + source_bonus,
             4,
         )
@@ -325,6 +337,9 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
                 matched_terms=matched[:12],
                 vector_backend=vector_backend,
                 graph_entities=graph_entities,
+                reranker_score=reranker_score,
+                sparse_score=round(sparse_score, 4),
+                query_plan=asdict(plan),
             )
         )
 

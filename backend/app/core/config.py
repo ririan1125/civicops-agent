@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     rag_remote_timeout_seconds: int = 35
     rag_remote_concurrency: int = 6
     rag_max_311_articles: int = 120
+    rag_vector_weight: float = 0.38
+    rag_lexical_weight: float = 0.38
+    rag_sparse_weight: float = 0.08
+    rag_reranker_enabled: bool = True
+    rag_reranker_weight: float = 0.16
     ingestion_sync_limit: int = 5000
     ingestion_sync_lookback_days: int = 7
 

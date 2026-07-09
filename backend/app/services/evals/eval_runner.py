@@ -95,6 +95,8 @@ def run_rag_retrieval_eval(db: Session) -> RAGRetrievalEvalResponse:
     hit_at_3 = 0
     hit_at_5 = 0
     reciprocal_rank_sum = 0.0
+    precision_at_5_sum = 0.0
+    context_precision_sum = 0.0
 
     for case in cases:
         expected = [str(value) for value in case.get("expected", [])]
@@ -103,11 +105,16 @@ def run_rag_retrieval_eval(db: Session) -> RAGRetrievalEvalResponse:
             f"{item.chunk.document.title} | {item.chunk.heading or ''} | {item.chunk.document.source_path or ''}"
             for item in retrieved
         ]
-        hit_rank: int | None = None
+        hit_rank = None
+        relevant_count = 0
         for index, label in enumerate(labels, start=1):
             if _matches_expected(label, expected):
-                hit_rank = index
-                break
+                relevant_count += 1
+                if hit_rank is None:
+                    hit_rank = index
+        precision_at_5_sum += relevant_count / max(1, min(5, len(labels)))
+        if hit_rank:
+            context_precision_sum += 1 / hit_rank
         reciprocal_rank = round(1 / hit_rank, 4) if hit_rank else 0.0
         reciprocal_rank_sum += reciprocal_rank
         if hit_rank is not None and hit_rank <= 1:
@@ -134,6 +141,18 @@ def run_rag_retrieval_eval(db: Session) -> RAGRetrievalEvalResponse:
         EvalMetric(name="rag_recall_at_3", passed=hit_at_3, total=total, score=round(hit_at_3 / total, 3) if total else 0.0),
         EvalMetric(name="rag_recall_at_5", passed=hit_at_5, total=total, score=round(hit_at_5 / total, 3) if total else 0.0),
         EvalMetric(name="rag_mrr", passed=round(reciprocal_rank_sum, 3), total=total, score=round(reciprocal_rank_sum / total, 3) if total else 0.0),
+        EvalMetric(
+            name="rag_precision_at_5",
+            passed=round(precision_at_5_sum, 3),
+            total=total,
+            score=round(precision_at_5_sum / total, 3) if total else 0.0,
+        ),
+        EvalMetric(
+            name="rag_context_precision",
+            passed=round(context_precision_sum, 3),
+            total=total,
+            score=round(context_precision_sum / total, 3) if total else 0.0,
+        ),
     ]
     provider, model = embedding_runtime_label()
     return RAGRetrievalEvalResponse(metrics=metrics, cases=case_results, embedding_provider=provider, embedding_model=model)

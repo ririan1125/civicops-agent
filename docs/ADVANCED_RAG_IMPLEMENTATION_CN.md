@@ -279,6 +279,18 @@ POST /rag/vector-store/init
 
 这条路线不是 hash，也不是假 RAG：脚本本地用同一个开源 `BAAI/bge-small-en-v1.5` 生成文档向量，再通过 `/rag/reindex/precomputed` 上传到线上 PostgreSQL/pgvector。线上问答时仍然用 BGE 生成 query embedding，再去 pgvector/BM25/graph/MMR 检索。
 
+## 12. RAG V2 做了什么
+
+V2 在原来的 dense vector + BM25 上继续增强：
+
+- 索引阶段为每个 chunk 写入 `metadata`、`parent_heading`、`section_path`、`sparse_terms`。
+- 检索阶段先生成 query plan，识别 NYC311、Open Data、官方源、项目架构等偏好。
+- hybrid score 变成可配置权重：dense vector、BM25 lexical、sparse overlap、reranker、heading、phrase、graph、source、metadata 一起融合。
+- citation 返回 `sparse_score`、`reranker_score`、`source_partition`、`query_plan`，方便解释检索为什么命中。
+- eval 增加 `rag_precision_at_5` 和 `rag_context_precision`，不只看 Recall/MRR。
+
+这版仍然保持工程真实：当前 sparse 是持久化词项特征 + BM25/sparse overlap，不是假装成 Milvus/BGE-M3 sparse vector；reranker 是轻量启发式 reranker，不是假装已经接入 cross-encoder；Graph 是 graph-aware bonus，不是假装已经有 Neo4j Graph RAG。
+
 GitHub Actions workflow：
 
 ```text
@@ -288,7 +300,7 @@ GitHub Actions workflow：
 - 每天触发 SQL 增量同步。
 - 每周一启动后台 RAG 重建任务，轮询任务状态，成功后检查/重建 pgvector mirror。
 
-## 12. 当前边界
+## 13. 当前边界
 
 - 线上 BGE 模型是 `BAAI/bge-small-en-v1.5`，不是更大的 BGE-M3。
 - 多模态目前是 PDF 文本层 + 图片 OCR/caption 文本检索，不是真正 image embedding。

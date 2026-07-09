@@ -24,6 +24,7 @@ def _snippet(text: str, max_chars: int = 260) -> str:
 def _citation(item: RetrievedChunk) -> Citation:
     document = item.chunk.document
     source_url = document.source_path if document.source_path and document.source_path.startswith("http") else None
+    metadata = item.chunk.chunk_metadata or {}
     return Citation(
         document_title=document.title,
         chunk_id=item.chunk.id,
@@ -36,6 +37,9 @@ def _citation(item: RetrievedChunk) -> Citation:
         vector_backend=item.vector_backend,
         graph_entities=item.graph_entities or [],
         matched_terms=item.matched_terms,
+        reranker_score=item.reranker_score,
+        sparse_score=item.sparse_score,
+        source_partition=metadata.get("logical_partition"),
     )
 
 
@@ -109,6 +113,7 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
             refused=True,
             retrieval_method=retrieval_method,
             generation_provider="none",
+            query_plan=retrieved[0].query_plan if retrieved else None,
         )
 
     answer, provider = _compose_answer(question, retrieved)
@@ -121,4 +126,5 @@ def answer_rag_question(db: Session, question: str, top_k: int = 4) -> RAGAskRes
         refused=False,
         retrieval_method=retrieval_method,
         generation_provider=provider,
+        query_plan=retrieved[0].query_plan if retrieved else None,
     )

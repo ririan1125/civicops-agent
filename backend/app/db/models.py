@@ -68,6 +68,9 @@ class PolicyChunk(Base):
     heading: Mapped[str | None] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
+    parent_heading: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    chunk_metadata: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
+    sparse_terms: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     document: Mapped[PolicyDocument] = relationship(back_populates="chunks")
     embedding: Mapped["PolicyChunkEmbedding"] = relationship(

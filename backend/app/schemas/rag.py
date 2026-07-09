@@ -69,8 +69,11 @@ class ReindexJobResponse(BaseModel):
 
 class PrecomputedChunk(BaseModel):
     heading: str | None = None
+    parent_heading: str | None = None
+    section_path: list[str] = Field(default_factory=list)
     content: str = Field(min_length=1)
     token_count: int = Field(default=0, ge=0)
+    sparse_terms: dict[str, int] = Field(default_factory=dict)
     embedding: list[float]
 
 
@@ -114,6 +117,9 @@ class Citation(BaseModel):
     vector_backend: str | None = None
     graph_entities: list[str] = []
     matched_terms: list[str] = []
+    reranker_score: float | None = None
+    sparse_score: float | None = None
+    source_partition: str | None = None
 
 
 class RAGAskResponse(BaseModel):
@@ -125,6 +131,7 @@ class RAGAskResponse(BaseModel):
     retrieval_method: str = "hybrid_bm25_json_vector_graph_mmr"
     generation_provider: str = "mock"
     trace_id: int | None = None
+    query_plan: dict | None = None
 
 
 class KnowledgeGraphNode(BaseModel):

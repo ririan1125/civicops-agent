@@ -45,7 +45,7 @@ def _existing_pgvector_dimensions(db: Session) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _source_partition(source_path: str | None, title: str | None = None) -> str:
+def source_partition(source_path: str | None, title: str | None = None) -> str:
     source = (source_path or "").lower()
     title_text = (title or "").lower()
     if "portal.311.nyc.gov" in source:
@@ -72,7 +72,7 @@ def _embedding_metadata(embedding: PolicyChunkEmbedding) -> str:
             "source_path": source_path,
             "heading": chunk.heading if chunk is not None else None,
             "chunk_index": chunk.chunk_index if chunk is not None else None,
-            "logical_partition": _source_partition(source_path, title),
+            "logical_partition": source_partition(source_path, title),
         },
         ensure_ascii=False,
     )

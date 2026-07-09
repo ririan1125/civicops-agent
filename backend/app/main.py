@@ -11,12 +11,19 @@ from app.api.routes_ingestion import router as ingestion_router
 from app.api.routes_rag import router as rag_router
 from app.api.routes_traces import router as traces_router
 from app.core.config import get_settings
+from app.db.schema_compat import ensure_rag_v2_columns
 from app.db.session import init_db
+from app.db.session import SessionLocal
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    db = SessionLocal()
+    try:
+        ensure_rag_v2_columns(db)
+    finally:
+        db.close()
     yield
 
 

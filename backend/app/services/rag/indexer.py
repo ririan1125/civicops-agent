@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.db.models import PolicyChunk, PolicyChunkEmbedding, PolicyDocument
 from app.services.rag.chunker import chunk_markdown
 from app.services.rag.embeddings import embed_texts
+from app.services.rag.metadata import source_metadata
+from app.services.rag.sparse import sparse_terms_for_text
 from app.services.rag.source_loader import DocumentSource, load_document_sources, sample_policy_dir
 from app.services.rag.vector_store import clear_pgvector_store_if_available, sync_pgvector_store_if_available
 
@@ -90,6 +92,7 @@ def index_policy_documents(
     used_titles: set[str] = set()
     for source in sources:
         document = PolicyDocument(title=_unique_title(source.title, used_titles), source_path=source.source_path)
+        document_metadata = source_metadata(document.title, source.source_path, source.source_type)
         db.add(document)
         db.flush()
         chunks = chunk_markdown(source.content)
@@ -102,6 +105,12 @@ def index_policy_documents(
                 heading=_truncate(chunk.heading, 255),
                 content=chunk.content,
                 token_count=chunk.token_count,
+                parent_heading=_truncate(chunk.parent_heading, 255),
+                chunk_metadata={
+                    **document_metadata,
+                    "section_path": chunk.section_path or [],
+                },
+                sparse_terms=sparse_terms_for_text(chunk.heading, chunk.content),
             )
             db.add(policy_chunk)
             db.flush()
@@ -160,6 +169,7 @@ def import_precomputed_policy_documents(
             title=_unique_title(str(source.get("title") or "Untitled Document"), used_titles),
             source_path=source.get("source_path"),
         )
+        document_metadata = source_metadata(document.title, source.get("source_path"), source.get("source_type"))
         db.add(document)
         db.flush()
         for index, chunk in enumerate(chunks):
@@ -175,6 +185,12 @@ def import_precomputed_policy_documents(
                 heading=_truncate(chunk.get("heading"), 255),
                 content=str(chunk.get("content") or ""),
                 token_count=int(chunk.get("token_count") or 0),
+                parent_heading=_truncate(chunk.get("parent_heading"), 255),
+                chunk_metadata={
+                    **document_metadata,
+                    "section_path": chunk.get("section_path") or [],
+                },
+                sparse_terms=chunk.get("sparse_terms") or sparse_terms_for_text(chunk.get("heading"), str(chunk.get("content") or "")),
             )
             db.add(policy_chunk)
             db.flush()

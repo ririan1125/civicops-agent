@@ -32,6 +32,17 @@ def test_hybrid_retriever_returns_scored_chunks(db_session) -> None:
     assert retrieved[0].score > 0
     assert retrieved[0].vector_score is not None
     assert retrieved[0].lexical_score is not None
+    assert retrieved[0].sparse_score is not None
+    assert retrieved[0].query_plan is not None
+
+
+def test_rag_v2_response_exposes_query_plan_and_sparse_scores(db_session) -> None:
+    index_policy_documents(db_session)
+    response = answer_rag_question(db_session, "How do I check a NYC311 service request status?")
+    assert response.query_plan is not None
+    assert response.citations
+    assert response.citations[0].sparse_score is not None
+    assert response.citations[0].reranker_score is not None
 
 
 def test_query_expansion_supports_chinese_service_request_status() -> None:

@@ -32,6 +32,9 @@ export type Citation = {
   lexical_score?: number | null;
   vector_score?: number | null;
   vector_backend?: string | null;
+  reranker_score?: number | null;
+  sparse_score?: number | null;
+  source_partition?: string | null;
   graph_entities: string[];
   matched_terms: string[];
 };
@@ -44,6 +47,7 @@ export type RAGResponse = {
   retrieval_method: string;
   generation_provider: string;
   trace_id: number | null;
+  query_plan?: Record<string, unknown> | null;
 };
 
 export type AgentRouteResponse = {

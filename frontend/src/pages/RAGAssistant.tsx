@@ -93,6 +93,11 @@ export function RAGAssistant() {
             <span>Generation</span><strong>{result.generation_provider}</strong>
             <span>Confidence</span><strong>{Math.round(result.confidence * 100)}%</strong>
             <span>Trace</span><strong>#{result.trace_id}</strong>
+            {result.query_plan ? (
+              <>
+                <span>Query plan</span><strong>{String(result.query_plan.strategy || "hybrid")}</strong>
+              </>
+            ) : null}
           </div>
           <div className="citations">
             {result.citations.map((citation) => (
@@ -100,6 +105,9 @@ export function RAGAssistant() {
                 <strong>{citation.document_title}</strong>
                 <span>
                   {citation.heading || "Untitled section"} | hybrid {citation.score} | vector {citation.vector_score ?? "n/a"} ({citation.vector_backend ?? "json"}) | lexical {citation.lexical_score ?? "n/a"}
+                </span>
+                <span>
+                  sparse {citation.sparse_score ?? "n/a"} | rerank {citation.reranker_score ?? "n/a"} | {citation.source_partition ?? "unpartitioned"}
                 </span>
                 {citation.source_url ? <a href={citation.source_url} target="_blank" rel="noreferrer">Open source</a> : null}
                 <p>{citation.snippet}</p>
