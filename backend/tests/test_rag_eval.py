@@ -14,10 +14,11 @@ def test_rag_retrieval_eval_returns_rank_metrics(db_session) -> None:
     assert response.embedding_model
 
 
-def test_embedding_benchmark_compares_local_hash_dimensions(db_session) -> None:
+def test_embedding_benchmark_uses_current_indexed_embeddings(db_session) -> None:
     index_policy_documents(db_session)
     response = run_embedding_benchmark(db_session)
     assert response.corpus_chunks > 0
     assert response.cases_count > 0
-    assert len(response.variants) == 3
+    assert len(response.variants) == 1
+    assert response.variants[0].dimensions == 384
     assert response.best_variant

@@ -1,5 +1,6 @@
 fastapi==0.139.0
 beautifulsoup4==4.14.3
+fastembed==0.7.3
 httpx==0.28.1
 psycopg[binary]==3.3.2
 pydantic==2.13.4

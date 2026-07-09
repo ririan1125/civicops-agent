@@ -150,7 +150,7 @@ Agent planner 会先判断问题类型：
 
 ## 当前边界
 
-- 线上默认使用 `local_hash` embedding；这是可部署 fallback，不是生产级语义 embedding。
+- 线上默认使用开源 `BAAI/bge-small-en-v1.5` embedding，通过 FastEmbed/ONNX 在后端生成向量；`local_hash` 只保留作单元测试 fallback。
 - DeepSeek key 配置在 Render 环境变量中，不提交到 GitHub。
 - PostgreSQL 线上已支持 pgvector mirror 和 HNSW cosine index；本地 SQLite 会自动使用 JSON vector fallback。
 - 多模态目前支持 PDF 文本层、图片 OCR/caption 文本；真正 image embedding 需要接多模态 embedding provider。

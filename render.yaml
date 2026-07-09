@@ -30,17 +30,19 @@ services:
       - key: DEEPSEEK_MODEL
         value: deepseek-chat
       - key: EMBEDDING_PROVIDER
-        value: local_hash
+        value: bge
       - key: EMBEDDING_API_KEY
         sync: false
       - key: EMBEDDING_BASE_URL
         value: ""
       - key: EMBEDDING_MODEL
-        value: text-embedding-3-small
+        value: BAAI/bge-small-en-v1.5
       - key: EMBEDDING_DIMENSIONS
         value: 384
       - key: EMBEDDING_BATCH_SIZE
-        value: 64
+        value: 32
+      - key: EMBEDDING_CACHE_DIR
+        value: /app/.cache/fastembed
       - key: RAG_INCLUDE_REMOTE_SOURCES
         value: "true"
       - key: RAG_REMOTE_TIMEOUT_SECONDS

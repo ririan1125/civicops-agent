@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 
 from app.db.models import PolicyChunk
-from app.services.rag.embeddings import EmbeddingProviderError, cosine_similarity, embed_query
+from app.services.rag.embeddings import EmbeddingProviderError, cosine_similarity, embed_query, embedding_runtime_label
 from app.services.rag.knowledge_graph import extract_text_entities
 from app.services.rag.vector_store import search_pgvector
 
@@ -250,9 +250,12 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
         return []
 
     try:
-        query_embedding = embed_query(expanded_question).vectors[0]
+        query_batch = embed_query(expanded_question)
+        query_embedding = query_batch.vectors[0]
+        runtime_provider, runtime_model = query_batch.provider, query_batch.model
     except EmbeddingProviderError:
         query_embedding = []
+        runtime_provider, runtime_model = embedding_runtime_label()
 
     pgvector_scores = search_pgvector(db, query_embedding, limit=max(candidate_pool * 4, top_k * 10)) if query_embedding else {}
     vector_backend = "pgvector" if pgvector_scores else "json"
@@ -281,7 +284,15 @@ def retrieve_chunks(db: Session, question: str, top_k: int = 4, candidate_pool: 
         if pgvector_scores:
             vector = pgvector_scores.get(chunk.id, 0.0)
         else:
-            vector = cosine_similarity(query_embedding, chunk.embedding.vector if query_embedding and chunk.embedding else None)
+            stored_vector = None
+            if (
+                query_embedding
+                and chunk.embedding
+                and chunk.embedding.provider == runtime_provider
+                and chunk.embedding.model == runtime_model
+            ):
+                stored_vector = chunk.embedding.vector
+            vector = cosine_similarity(query_embedding, stored_vector)
         matched = _matched_terms(query_terms, chunk_terms)
         heading_bonus = _heading_bonus(query_term_set, chunk.heading)
         phrase_bonus = _phrase_bonus(question, chunk.content)

@@ -128,7 +128,7 @@ Additional dimensions to add later:
 
 ## Boundaries
 
-- Live deployment defaults to `local_hash` embedding unless an external embedding API is configured.
+- Live deployment defaults to the open-source `BAAI/bge-small-en-v1.5` embedding model through FastEmbed/ONNX.
 - Current multimodal support indexes PDF text and image OCR/caption text; true image embeddings require a multimodal embedding provider.
 - Reindexing is synchronous and should become a background job for larger crawls.
 - Admin-like endpoints need authentication before production use.

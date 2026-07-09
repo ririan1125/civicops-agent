@@ -17,12 +17,14 @@ class Settings(BaseSettings):
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
-    embedding_provider: str = "local_hash"
+    embedding_provider: str = "bge"
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimensions: int = 384
     embedding_batch_size: int = 64
+    embedding_cache_dir: str | None = None
+    embedding_query_instruction: str = "Represent this sentence for searching relevant passages: "
     nyc_311_endpoint: str = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
     rag_include_remote_sources: bool = False
     rag_remote_timeout_seconds: int = 35

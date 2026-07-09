@@ -197,6 +197,7 @@ def sync_pgvector_store_if_available(db: Session) -> dict | None:
 def search_pgvector(db: Session, query_embedding: list[float], limit: int = 80) -> dict[int, float]:
     if not query_embedding or not _is_postgresql(db):
         return {}
+    provider, model = embedding_runtime_label()
     try:
         if not _pgvector_table_exists(db):
             return {}
@@ -206,6 +207,8 @@ def search_pgvector(db: Session, query_embedding: list[float], limit: int = 80) 
                 SELECT chunk_id, 1 - (embedding <=> CAST(:query_embedding AS vector)) AS cosine_score
                 FROM rag_vector_embeddings
                 WHERE dimensions = :dimensions
+                  AND provider = :provider
+                  AND model = :model
                 ORDER BY embedding <=> CAST(:query_embedding AS vector)
                 LIMIT :limit
                 """
@@ -213,6 +216,8 @@ def search_pgvector(db: Session, query_embedding: list[float], limit: int = 80) 
             {
                 "query_embedding": _vector_literal(query_embedding),
                 "dimensions": len(query_embedding),
+                "provider": provider,
+                "model": model,
                 "limit": max(1, limit),
             },
         ).mappings()
@@ -262,6 +267,19 @@ def describe_vector_store(db: Session) -> dict:
 
         total_vectors = int(db.execute(text("SELECT COUNT(*) FROM rag_vector_embeddings")).scalar() or 0)
         dimensions = db.execute(text("SELECT MAX(dimensions) FROM rag_vector_embeddings")).scalar()
+        indexed_runtime = db.execute(
+            text(
+                """
+                SELECT provider, model, COUNT(*) AS row_count
+                FROM rag_vector_embeddings
+                GROUP BY provider, model
+                ORDER BY row_count DESC
+                LIMIT 1
+                """
+            )
+        ).mappings().first()
+        indexed_provider = str(indexed_runtime["provider"]) if indexed_runtime else provider
+        indexed_model = str(indexed_runtime["model"]) if indexed_runtime else model
         partition_rows = db.execute(
             text(
                 """
@@ -296,12 +314,17 @@ def describe_vector_store(db: Session) -> dict:
             "pgvector_enabled": True,
             "collection_name": "policy_documents",
             "physical_table": "rag_vector_embeddings",
-            "embedding_provider": provider,
-            "embedding_model": model,
+            "embedding_provider": indexed_provider,
+            "embedding_model": indexed_model,
             "dimensions": int(dimensions) if dimensions is not None else None,
             "index_type": "hnsw_vector_cosine_ops",
             "total_vectors": total_vectors,
             "logical_partitions": partitions,
+            "message": (
+                "Indexed embeddings do not match the current runtime model. Run /rag/reindex and /rag/vector-store/init."
+                if (indexed_provider, indexed_model) != (provider, model)
+                else None
+            ),
         }
     except SQLAlchemyError as exc:
         db.rollback()

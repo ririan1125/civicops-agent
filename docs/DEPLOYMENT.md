@@ -38,7 +38,8 @@ Important environment variables:
 DATABASE_URL=<from Render database>
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=<Render secret, sync disabled>
-EMBEDDING_PROVIDER=local_hash
+EMBEDDING_PROVIDER=bge
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 EMBEDDING_API_KEY=<Render secret, sync disabled when used>
 RAG_INCLUDE_REMOTE_SOURCES=true
 RAG_MAX_311_ARTICLES=120
@@ -119,4 +120,4 @@ https://ririan1125.github.io/civicops-agent/
 - Render free tier can sleep and has resource limits.
 - Public admin-like endpoints should be protected before real production use.
 - Reindexing is synchronous; larger crawls should move to a background queue.
-- Live embedding defaults to `local_hash`; production semantic retrieval should use a real embedding provider.
+- Live embedding defaults to the open-source `BAAI/bge-small-en-v1.5` model through FastEmbed/ONNX.

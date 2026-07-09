@@ -4,6 +4,18 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import models  # noqa: F401
 from app.db.base import Base
+from app.core.config import get_settings
+
+
+@pytest.fixture(autouse=True)
+def deterministic_test_settings(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "local_hash")
+    monkeypatch.setenv("EMBEDDING_MODEL", "local-hash-test")
+    monkeypatch.setenv("EMBEDDING_DIMENSIONS", "384")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture()

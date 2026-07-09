@@ -23,8 +23,6 @@ RAG source loader 会加载这些来源：
 - NYC Open Data Socrata metadata：`https://data.cityofnewyork.us/api/views/erm2-nwe9`，用于索引字段、数据集说明、更新时间。
 - NYC Open Data Technical Standards Manual：GitHub Pages HTML 版本，以及可选 PDF。
 
-线上最近一次 reindex 的规模是 136 documents、约 1890 chunks、130 remote sources。
-
 ## 3. 文档处理流程
 
 ```text
@@ -32,7 +30,7 @@ RAG source loader 会加载这些来源：
   -> 提取正文或结构化 metadata
   -> 转成 markdown-like text
   -> heading-aware chunking
-  -> embedding
+  -> BGE embedding
   -> policy_documents / policy_chunks / policy_chunk_embeddings
   -> pgvector mirror table
 ```
@@ -58,34 +56,48 @@ HTML 会去掉 `script/style/nav/header/footer`，保留标题、段落、列表
 
 ## 5. Embedding 策略
 
-当前线上默认：
+线上默认已经切换为开源 BGE：
 
 ```text
-EMBEDDING_PROVIDER=local_hash
-EMBEDDING_DIMENSIONS=384
+EMBEDDING_PROVIDER=bge
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ```
 
-`local_hash` 是无 key fallback。它把 token、bigram、中文字符 n-gram hash 到固定维度向量里，适合 demo、测试和可重复部署，但不是生产级语义 embedding。
-
-项目也支持 OpenAI-compatible embedding API：
+实现方式是 FastEmbed/ONNX，不依赖 PyTorch：
 
 ```text
-EMBEDDING_PROVIDER=api
-EMBEDDING_BASE_URL=...
-EMBEDDING_API_KEY=...
-EMBEDDING_MODEL=...
+backend/app/services/rag/embeddings.py
+  -> fastembed.TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 ```
 
-可以接 Jina、Voyage、Cohere、SiliconFlow、OpenAI-compatible BGE 或自部署 embedding 服务。真正比较不同 embedding 的流程是：
+选择这个模型的原因：
+
+- 它是 BAAI 发布的开源 BGE embedding 模型。
+- 384 维，和当前 pgvector `vector(384)` 兼容。
+- 模型体量较小，适合 Render free tier 和本地 CPU。
+- 当前 NYC311 官方文档主要是英文，英文 BGE 比中文单语 BGE 更匹配语料。
+- 中文问题通过 query expansion 补充英文检索词，例如 “查询状态” 会扩展到 `check status service request`。
+
+`local_hash` 还保留在代码里，但只作为单元测试和离线极端 fallback，不再是线上 RAG embedding。它不是正式 RAG 检索模型。
+
+如果后续要支持更多中文文档或跨语言文档，可以测试：
+
+- `BAAI/bge-small-zh-v1.5`
+- `BAAI/bge-m3`
+- 自部署或 API 托管的 BGE-M3 / bge-large
+
+真正比较不同 embedding 的流程：
 
 ```text
-切换 embedding provider/model
+切换 EMBEDDING_PROVIDER / EMBEDDING_MODEL
   -> /rag/reindex
+  -> /rag/vector-store/init
   -> /evals/rag-retrieval
+  -> /evals/embedding-benchmark
   -> 记录 Recall@K / MRR / latency / cost
 ```
 
-当前新增的 `/evals/embedding-benchmark` 会做 vector-only local baseline，对比 `local-hash-256`、`local-hash-384`、`local-hash-768`，用于说明 embedding 维度变化对召回的影响。完整线上质量仍以 `/evals/rag-retrieval` 为准，因为实际问答链路是 hybrid retrieval。
+`/evals/embedding-benchmark` 评估的是当前已经索引进数据库的 embedding model 的 vector-only ranking。实际问答链路仍然以 `/evals/rag-retrieval` 为准，因为生产检索是 hybrid retrieval。
 
 ## 6. 向量数据库和 schema
 
@@ -117,8 +129,8 @@ USING hnsw (embedding vector_cosine_ops)
 
 选择 HNSW + cosine 的原因：
 
-- 当前 embedding 都做了归一化，cosine 更合适。
-- HNSW 适合近似最近邻召回，后续 corpus 扩大时比全表扫描更稳。
+- BGE 向量会归一化，cosine 适合语义相似度。
+- HNSW 适合近似最近邻召回，corpus 扩大时比全表扫描更稳。
 - PostgreSQL/pgvector 和已有 PostgreSQL 数据库部署在一起，系统复杂度比额外维护 Chroma、Milvus、Qdrant 更低。
 
 逻辑 partition 不是物理分表，而是通过 source metadata 分类：
@@ -145,7 +157,7 @@ GET /rag/vector-store/schema
 ```text
 用户问题
   -> 中文/英文 query expansion
-  -> query embedding
+  -> BGE query embedding
   -> pgvector vector recall，失败时 JSON cosine fallback
   -> BM25 lexical score
   -> heading bonus
@@ -157,9 +169,9 @@ GET /rag/vector-store/schema
   -> top_k evidence chunks
 ```
 
-最终分数大致来自：
+最终分数来自：
 
-- vector score
+- BGE vector score
 - BM25 score
 - matched term density
 - heading overlap
@@ -231,15 +243,13 @@ POST /evals/rag-retrieval
 - Recall@5
 - MRR
 
-Embedding baseline：
+Embedding benchmark：
 
 ```text
 POST /evals/embedding-benchmark
 ```
 
-当前对比 `local-hash-256/384/768` 的 vector-only ranking。这个接口用于研究 embedding 变化，不代表最终 hybrid RAG 的全部效果。
-
-线上最近验证过 `/evals/rag-retrieval`：10 个 gold case 的 Recall@1/3/5 和 MRR 都是 1.0。这个结果只说明当前小型 gold set 覆盖的场景通过了，不等于所有问题都 100% 正确。
+它会读取当前数据库里已索引的 embedding 向量，做 vector-only ranking。换 embedding model 后必须先 `/rag/reindex`，否则 benchmark 仍然评估旧向量。
 
 ## 11. 数据更新
 
@@ -269,10 +279,10 @@ GitHub Actions workflow：
 
 ## 12. 当前边界
 
-- 线上默认还是 `local_hash`，不是生产级语义 embedding。
+- 线上 BGE 模型是 `BAAI/bge-small-en-v1.5`，不是更大的 BGE-M3。
 - 多模态目前是 PDF 文本层 + 图片 OCR/caption 文本检索，不是真正 image embedding。
 - `reindex` 是同步 HTTP endpoint，大规模抓取 500+ 或 1000+ 文档时应改成后台队列。
 - public demo 暂时没有生产鉴权，真实系统需要保护 ingestion/reindex 这类 admin endpoint。
 - 当前知识图谱是轻量共现图，不是完整知识图谱存储。
 
-这版已经从“几段文本塞 prompt”升级成了：真实官方文档抓取、chunking、embedding、pgvector、BM25、graph-aware hybrid retrieval、MMR、citation、eval、daily sync 的完整 RAG 工程闭环。
+这版已经从“hash 向量 demo”升级成了：开源 BGE embedding、真实官方文档抓取、chunking、pgvector、BM25、graph-aware hybrid retrieval、MMR、citation、eval、daily sync 的完整 RAG 工程闭环。

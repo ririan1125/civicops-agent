@@ -14,7 +14,7 @@ from app.schemas.evals import (
     RAGRetrievalEvalResponse,
 )
 from app.services.rag.answerer import answer_rag_question
-from app.services.rag.embeddings import cosine_similarity, embed_texts_local_hash, embedding_runtime_label
+from app.services.rag.embeddings import cosine_similarity, embed_query, embedding_runtime_label
 from app.services.rag.retriever import retrieve_chunks
 from app.services.sql_agent.safety import SQLSafetyError, assert_safe_select
 
@@ -153,24 +153,27 @@ def _metrics_from_case_results(case_results: list[RAGRetrievalCaseResult]) -> li
     ]
 
 
-def _run_vector_only_benchmark(
+def _run_indexed_embedding_benchmark(
     cases: list[dict],
     chunks: list[PolicyChunk],
-    dimensions: int,
 ) -> EmbeddingBenchmarkVariant:
-    chunk_texts = [f"{chunk.document.title}\n{chunk.heading or ''}\n{chunk.content}" for chunk in chunks]
-    chunk_embeddings = embed_texts_local_hash(chunk_texts, dimensions)
+    provider, model = embedding_runtime_label()
+    chunks_with_embeddings = [
+        chunk
+        for chunk in chunks
+        if chunk.embedding is not None and chunk.embedding.provider == provider and chunk.embedding.model == model
+    ]
     case_results: list[RAGRetrievalCaseResult] = []
 
     for case in cases:
         expected = [str(value) for value in case.get("expected", [])]
-        query_embedding = embed_texts_local_hash([case["question"]], dimensions).vectors[0]
+        query_embedding = embed_query(case["question"]).vectors[0]
         scored = [
             (
                 chunk,
-                cosine_similarity(query_embedding, vector),
+                cosine_similarity(query_embedding, chunk.embedding.vector if chunk.embedding else None),
             )
-            for chunk, vector in zip(chunks, chunk_embeddings.vectors)
+            for chunk in chunks_with_embeddings
         ]
         top = sorted(scored, key=lambda item: item[1], reverse=True)[:5]
         labels = [
@@ -196,9 +199,9 @@ def _run_vector_only_benchmark(
         )
 
     return EmbeddingBenchmarkVariant(
-        provider=chunk_embeddings.provider,
-        model=chunk_embeddings.model,
-        dimensions=chunk_embeddings.dimensions,
+        provider=provider,
+        model=model,
+        dimensions=chunks_with_embeddings[0].embedding.dimensions if chunks_with_embeddings else 0,
         metrics=_metrics_from_case_results(case_results),
         cases=case_results,
     )
@@ -208,11 +211,11 @@ def run_embedding_benchmark(db: Session) -> EmbeddingBenchmarkResponse:
     cases = _load_json(evals_dir() / "rag_retrieval_cases.json")
     chunks = (
         db.query(PolicyChunk)
-        .options(joinedload(PolicyChunk.document))
+        .options(joinedload(PolicyChunk.document), joinedload(PolicyChunk.embedding))
         .order_by(PolicyChunk.id.asc())
         .all()
     )
-    variants = [_run_vector_only_benchmark(cases, chunks, dimensions) for dimensions in (256, 384, 768)]
+    variants = [_run_indexed_embedding_benchmark(cases, chunks)]
     best_variant = None
     if variants:
         best = max(
@@ -229,8 +232,8 @@ def run_embedding_benchmark(db: Session) -> EmbeddingBenchmarkResponse:
         best_variant=best_variant,
         variants=variants,
         notes=[
-            "This benchmark isolates embedding behavior with vector-only ranking.",
+            "This benchmark isolates the currently indexed embedding provider with vector-only ranking.",
             "The production answer path still uses hybrid BM25 + vector + graph + MMR retrieval.",
-            "External embedding APIs can be compared by setting EMBEDDING_PROVIDER=api and reindexing.",
+            "To compare another embedding model, change EMBEDDING_PROVIDER/EMBEDDING_MODEL, run /rag/reindex, then rerun this benchmark.",
         ],
     )

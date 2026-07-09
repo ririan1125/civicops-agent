@@ -2,6 +2,7 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 import httpx
 
@@ -91,17 +92,68 @@ def _api_embeddings(texts: list[str]) -> EmbeddingBatch:
     )
 
 
+@lru_cache(maxsize=4)
+def _fastembed_model(model_name: str, cache_dir: str | None):
+    try:
+        from fastembed import TextEmbedding
+    except ImportError as exc:
+        raise EmbeddingProviderError("BGE embeddings require the fastembed package.") from exc
+
+    kwargs = {"model_name": model_name}
+    if cache_dir:
+        kwargs["cache_dir"] = cache_dir
+    try:
+        return TextEmbedding(**kwargs)
+    except TypeError:
+        kwargs.pop("cache_dir", None)
+        return TextEmbedding(**kwargs)
+
+
+def _as_float_list(vector) -> list[float]:
+    if hasattr(vector, "tolist"):
+        vector = vector.tolist()
+    return [float(value) for value in vector]
+
+
+def _prepare_bge_text(text: str, *, is_query: bool) -> str:
+    settings = get_settings()
+    instruction = settings.embedding_query_instruction
+    if is_query and instruction.strip() and not text.startswith(instruction):
+        separator = "" if instruction[-1].isspace() else " "
+        return f"{instruction}{separator}{text}"
+    return text
+
+
+def _bge_embeddings(texts: list[str], *, is_query: bool = False) -> EmbeddingBatch:
+    settings = get_settings()
+    model_name = settings.embedding_model or "BAAI/bge-small-en-v1.5"
+    model = _fastembed_model(model_name, settings.embedding_cache_dir)
+    batch_size = max(1, min(settings.embedding_batch_size, 128))
+    prepared_texts = [_prepare_bge_text(text, is_query=is_query) for text in texts]
+    vectors = [_normalize(_as_float_list(vector)) for vector in model.embed(prepared_texts, batch_size=batch_size)]
+    dimensions = len(vectors[0]) if vectors else 0
+    return EmbeddingBatch(provider="bge", model=model_name, dimensions=dimensions, vectors=vectors)
+
+
 def embed_texts(texts: list[str]) -> EmbeddingBatch:
     settings = get_settings()
     provider = settings.embedding_provider.lower()
     if provider in {"api", "openai_compatible"}:
         return _api_embeddings(texts)
+    if provider in {"bge", "fastembed"}:
+        return _bge_embeddings(texts, is_query=False)
 
     return embed_texts_local_hash(texts, settings.embedding_dimensions)
 
 
 def embed_query(text: str) -> EmbeddingBatch:
-    return embed_texts([text])
+    settings = get_settings()
+    provider = settings.embedding_provider.lower()
+    if provider in {"api", "openai_compatible"}:
+        return _api_embeddings([text])
+    if provider in {"bge", "fastembed"}:
+        return _bge_embeddings([text], is_query=True)
+    return embed_texts_local_hash([text], settings.embedding_dimensions)
 
 
 def embedding_runtime_label() -> tuple[str, str]:
@@ -109,6 +161,8 @@ def embedding_runtime_label() -> tuple[str, str]:
     provider = settings.embedding_provider.lower()
     if provider in {"api", "openai_compatible"}:
         return provider, settings.embedding_model
+    if provider in {"bge", "fastembed"}:
+        return "bge", settings.embedding_model
     dimensions = max(64, settings.embedding_dimensions)
     return "local_hash", f"local-hash-{dimensions}"
 

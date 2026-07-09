@@ -207,8 +207,8 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
       chunks_indexed: 1802,
       local_sources_indexed: 6,
       remote_sources_indexed: 127,
-      embedding_provider: "local_hash",
-      embedding_model: "local-hash-384",
+      embedding_provider: "bge",
+      embedding_model: "BAAI/bge-small-en-v1.5",
       warnings: []
     } as T;
   }
@@ -222,8 +222,8 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
       pgvector_enabled: false,
       collection_name: "policy_documents",
       physical_table: "policy_chunk_embeddings",
-      embedding_provider: "local_hash",
-      embedding_model: "local-hash-384",
+      embedding_provider: "bge",
+      embedding_model: "BAAI/bge-small-en-v1.5",
       dimensions: 384,
       index_type: "application_side_cosine",
       total_vectors: 1802,
@@ -275,21 +275,19 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
           top_score: 0.64
         }
       ],
-      embedding_provider: "local_hash",
-      embedding_model: "local-hash-384"
+      embedding_provider: "bge",
+      embedding_model: "BAAI/bge-small-en-v1.5"
     } as T;
   }
   if (path === "/evals/embedding-benchmark" && method === "POST") {
     return {
       corpus_chunks: 1802,
       cases_count: 10,
-      best_variant: "local-hash-384",
+      best_variant: "BAAI/bge-small-en-v1.5",
       variants: [
-        { provider: "local_hash", model: "local-hash-256", dimensions: 256, metrics: [{ name: "rag_mrr", passed: 8.8, total: 10, score: 0.88 }, { name: "rag_recall_at_1", passed: 8, total: 10, score: 0.8 }] },
-        { provider: "local_hash", model: "local-hash-384", dimensions: 384, metrics: [{ name: "rag_mrr", passed: 9.2, total: 10, score: 0.92 }, { name: "rag_recall_at_1", passed: 9, total: 10, score: 0.9 }] },
-        { provider: "local_hash", model: "local-hash-768", dimensions: 768, metrics: [{ name: "rag_mrr", passed: 9.1, total: 10, score: 0.91 }, { name: "rag_recall_at_1", passed: 9, total: 10, score: 0.9 }] }
+        { provider: "bge", model: "BAAI/bge-small-en-v1.5", dimensions: 384, metrics: [{ name: "rag_mrr", passed: 9.2, total: 10, score: 0.92 }, { name: "rag_recall_at_1", passed: 9, total: 10, score: 0.9 }] }
       ],
-      notes: ["Demo benchmark data."]
+      notes: ["Demo benchmark data for the currently indexed open-source BGE model."]
     } as T;
   }
   throw new Error(`Demo API route is not implemented: ${method} ${path}`);

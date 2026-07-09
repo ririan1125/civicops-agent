@@ -217,7 +217,7 @@ This should route to RAG.
 | `GET /traces` | Execution trace history |
 | `POST /evals/run` | SQL/RAG evaluation suite |
 | `POST /evals/rag-retrieval` | Retrieval Recall@K and MRR evaluation |
-| `POST /evals/embedding-benchmark` | Vector-only embedding baseline comparison for local hash dimensions |
+| `POST /evals/embedding-benchmark` | Vector-only benchmark for the currently indexed embedding model |
 
 ## Local Development
 
@@ -286,11 +286,12 @@ curl -X POST http://localhost:8000/ingestion/sync-latest `
 
 ## LLM and Embeddings
 
-Default no-key mode:
+Default local mode:
 
 ```text
 LLM_PROVIDER=mock
-EMBEDDING_PROVIDER=local_hash
+EMBEDDING_PROVIDER=bge
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ```
 
 Production-like mode:
@@ -298,23 +299,21 @@ Production-like mode:
 ```text
 LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_key_here
-EMBEDDING_PROVIDER=api
-EMBEDDING_BASE_URL=your_embedding_base_url
-EMBEDDING_API_KEY=your_embedding_key
-EMBEDDING_MODEL=your_embedding_model
+EMBEDDING_PROVIDER=bge
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ```
 
 Never commit real API keys.
 
-`local_hash` is a no-key fallback for reproducible demos and tests. For production-quality semantic retrieval, configure an OpenAI-compatible embedding service such as Jina, Voyage, Cohere, OpenAI-compatible BGE, SiliconFlow, or a self-hosted embedding endpoint.
+The deployed RAG pipeline uses the open-source BGE model through FastEmbed/ONNX, not the old deterministic hash vectors. `local_hash` remains only as a fast deterministic test fallback. For larger production semantic retrieval, you can still configure an OpenAI-compatible embedding endpoint that hosts a stronger open-source model such as BGE-M3.
 
 Embedding comparison flow:
 
 ```text
-1. Set EMBEDDING_PROVIDER / EMBEDDING_MODEL / EMBEDDING_API_KEY when testing an external provider.
+1. Set EMBEDDING_PROVIDER / EMBEDDING_MODEL when testing another model.
 2. Run POST /rag/reindex.
 3. Run POST /evals/rag-retrieval for the full hybrid retrieval score.
-4. Run POST /evals/embedding-benchmark for vector-only local baseline comparison.
+4. Run POST /evals/embedding-benchmark for vector-only current-model comparison.
 5. Compare Recall@1, Recall@3, Recall@5, MRR, latency, and cost across runs.
 ```
 
