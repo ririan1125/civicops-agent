@@ -53,7 +53,7 @@ If a question mixes both, the planner chooses the most direct tool first. A prod
 
 NYC 311 records change over time. The system supports manual imports and incremental sync. Incremental sync looks back over recent records and upserts them by `unique_key`, which captures new requests and status changes for recently created requests.
 
-Official documentation can also change. The RAG reindex job endpoint can refresh remote official sources and rebuild the chunk index without holding one long HTTP request open. The GitHub Actions workflow calls the data sync endpoint daily and starts a background RAG refresh plus pgvector mirror check weekly.
+Official documentation can also change. The RAG reindex job endpoint can refresh remote official sources and rebuild the chunk index without holding one long HTTP request open. For full BGE corpus refreshes on small instances, the project also supports importing locally precomputed BGE vectors through `/rag/reindex/precomputed`. The GitHub Actions workflow calls the data sync endpoint daily and starts a background RAG refresh plus pgvector mirror check weekly.
 
 ## Current Production Tradeoffs
 

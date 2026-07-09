@@ -130,3 +130,78 @@ def index_policy_documents(
         remote_sources_indexed=remote_sources_indexed,
         warnings=warnings,
     )
+
+
+def import_precomputed_policy_documents(
+    db: Session,
+    *,
+    documents: list[dict],
+    embedding_provider: str,
+    embedding_model: str,
+    dimensions: int,
+    warnings: list[str] | None = None,
+) -> IndexResult:
+    if dimensions <= 0:
+        raise ValueError("Embedding dimensions must be positive.")
+
+    clear_policy_index(db)
+    clear_pgvector_store_if_available(db)
+    documents_indexed = 0
+    chunks_indexed = 0
+    local_sources_indexed = 0
+    remote_sources_indexed = 0
+    used_titles: set[str] = set()
+
+    for source in documents:
+        chunks = source.get("chunks") or []
+        if not chunks:
+            continue
+        document = PolicyDocument(
+            title=_unique_title(str(source.get("title") or "Untitled Document"), used_titles),
+            source_path=source.get("source_path"),
+        )
+        db.add(document)
+        db.flush()
+        for index, chunk in enumerate(chunks):
+            vector = [float(value) for value in chunk.get("embedding") or []]
+            if len(vector) != dimensions:
+                raise ValueError(
+                    f"Embedding dimension mismatch for {document.title} chunk {index}: "
+                    f"expected {dimensions}, received {len(vector)}."
+                )
+            policy_chunk = PolicyChunk(
+                document_id=document.id,
+                chunk_index=index,
+                heading=_truncate(chunk.get("heading"), 255),
+                content=str(chunk.get("content") or ""),
+                token_count=int(chunk.get("token_count") or 0),
+            )
+            db.add(policy_chunk)
+            db.flush()
+            db.add(
+                PolicyChunkEmbedding(
+                    chunk_id=policy_chunk.id,
+                    provider=embedding_provider,
+                    model=embedding_model,
+                    dimensions=dimensions,
+                    vector=vector,
+                )
+            )
+            chunks_indexed += 1
+        documents_indexed += 1
+        source_type = str(source.get("source_type") or "")
+        source_path = str(source.get("source_path") or "")
+        if source_type.startswith("remote_") or source_path.startswith("http"):
+            remote_sources_indexed += 1
+        else:
+            local_sources_indexed += 1
+        db.commit()
+
+    sync_pgvector_store_if_available(db)
+    return IndexResult(
+        documents_indexed=documents_indexed,
+        chunks_indexed=chunks_indexed,
+        local_sources_indexed=local_sources_indexed,
+        remote_sources_indexed=remote_sources_indexed,
+        warnings=warnings or [],
+    )

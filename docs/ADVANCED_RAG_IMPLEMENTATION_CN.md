@@ -269,6 +269,16 @@ GET /rag/reindex/jobs/{job_id}
 POST /rag/vector-store/init
 ```
 
+小云服务器做全量 BGE 索引时，更推荐本地或 CI 预计算：
+
+```powershell
+.\backend\.venv\Scripts\python backend\scripts\build_and_upload_rag_index.py `
+  --api-base https://civicops-agent-api-ririan1125.onrender.com `
+  --max-311-articles 120
+```
+
+这条路线不是 hash，也不是假 RAG：脚本本地用同一个开源 `BAAI/bge-small-en-v1.5` 生成文档向量，再通过 `/rag/reindex/precomputed` 上传到线上 PostgreSQL/pgvector。线上问答时仍然用 BGE 生成 query embedding，再去 pgvector/BM25/graph/MMR 检索。
+
 GitHub Actions workflow：
 
 ```text
@@ -282,7 +292,7 @@ GitHub Actions workflow：
 
 - 线上 BGE 模型是 `BAAI/bge-small-en-v1.5`，不是更大的 BGE-M3。
 - 多模态目前是 PDF 文本层 + 图片 OCR/caption 文本检索，不是真正 image embedding。
-- `/rag/reindex/jobs` 已经是后台重建任务；`/rag/reindex` 仍保留给本地同步调试。
+- `/rag/reindex/jobs` 是后台重建任务；小实例全量索引更推荐本地/CI 预计算后走 `/rag/reindex/precomputed` 导入。
 - public demo 暂时没有生产鉴权，真实系统需要保护 ingestion/reindex 这类 admin endpoint。
 - 当前知识图谱是轻量共现图，不是完整知识图谱存储。
 

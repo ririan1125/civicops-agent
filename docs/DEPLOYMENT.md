@@ -81,6 +81,16 @@ GET /rag/reindex/jobs/{job_id}
 POST /rag/vector-store/init
 ```
 
+For full BGE corpus refreshes on small Render instances, prefer local or CI precomputation:
+
+```powershell
+.\backend\.venv\Scripts\python backend\scripts\build_and_upload_rag_index.py `
+  --api-base https://civicops-agent-api-ririan1125.onrender.com `
+  --max-311-articles 120
+```
+
+That script uses the same open-source BGE model locally, uploads documents, chunks, and vectors through `POST /rag/reindex/precomputed`, and lets the deployed API backfill pgvector.
+
 Automation:
 
 ```text
@@ -120,5 +130,5 @@ https://ririan1125.github.io/civicops-agent/
 
 - Render free tier can sleep and has resource limits.
 - Public admin-like endpoints should be protected before real production use.
-- Reindexing supports a background job endpoint so BGE indexing does not depend on one long HTTP request.
+- Reindexing supports a background job endpoint and a precomputed-index import path. Full-corpus BGE indexing is safer from a local machine or CI runner than from a small free web instance.
 - Live embedding defaults to the open-source `BAAI/bge-small-en-v1.5` model through FastEmbed/ONNX, with the model cache preloaded into the Docker image.

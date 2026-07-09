@@ -213,6 +213,7 @@ This should route to RAG.
 | `POST /rag/reindex/jobs` | Start a background RAG rebuild job for production-safe refresh |
 | `GET /rag/reindex/jobs/{job_id}` | Check background RAG rebuild status |
 | `GET /rag/reindex/jobs/latest` | Check the latest background RAG rebuild job |
+| `POST /rag/reindex/precomputed` | Import a locally precomputed BGE index into PostgreSQL/pgvector |
 | `POST /rag/ask` | Hybrid RAG question answering |
 | `POST /rag/vector-store/init` | PostgreSQL pgvector table, backfill, and HNSW index initialization |
 | `GET /rag/vector-store/schema` | Show RAG collection, physical table, index, dimensions, and logical partitions |
@@ -282,6 +283,15 @@ $job = curl.exe -s -X POST http://localhost:8000/rag/reindex/jobs `
 curl.exe http://localhost:8000/rag/reindex/jobs/$($job.id)
 ```
 
+Build BGE embeddings locally and upload the precomputed index to the deployed API:
+
+```powershell
+cd "D:\Backup\Documents\agent开发"
+.\backend\.venv\Scripts\python backend\scripts\build_and_upload_rag_index.py `
+  --api-base https://civicops-agent-api-ririan1125.onrender.com `
+  --max-311-articles 120
+```
+
 Initialize pgvector locally on PostgreSQL:
 
 ```powershell
@@ -317,7 +327,7 @@ EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
 Never commit real API keys.
 
-The deployed RAG pipeline uses the open-source BGE model through FastEmbed/ONNX, not the old deterministic hash vectors. `local_hash` remains only as a fast deterministic test fallback. For larger production semantic retrieval, you can still configure an OpenAI-compatible embedding endpoint that hosts a stronger open-source model such as BGE-M3.
+The deployed RAG pipeline uses the open-source BGE model through FastEmbed/ONNX, not the old deterministic hash vectors. `local_hash` remains only as a fast deterministic test fallback. For full-corpus refreshes on small cloud instances, the recommended path is to compute BGE document embeddings locally with `backend/scripts/build_and_upload_rag_index.py` and import the precomputed vectors into PostgreSQL/pgvector. Query-time embedding still runs in the deployed backend with the same BGE model.
 
 Embedding comparison flow:
 
@@ -366,7 +376,7 @@ GET /rag/vector-store/schema
 The live deployment also has a GitHub Actions workflow at `.github/workflows/daily-data-sync.yml`:
 
 - daily: `POST /ingestion/sync-latest` to upsert new/recent NYC 311 rows;
-- weekly: `POST /rag/reindex/jobs`, polling `GET /rag/reindex/jobs/{job_id}`, then `POST /rag/vector-store/init` to refresh official documents and pgvector rows.
+- weekly: `POST /rag/reindex/jobs`, polling `GET /rag/reindex/jobs/{job_id}`, then `POST /rag/vector-store/init` to refresh official documents and pgvector rows. For larger refreshes on free instances, run `backend/scripts/build_and_upload_rag_index.py` from a local machine or CI runner and upload through `POST /rag/reindex/precomputed`.
 
 ## Current Boundaries
 

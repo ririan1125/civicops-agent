@@ -9,9 +9,26 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://civicops-agent-api-ririan1125.onrender.com' }}
     steps:
+      - name: Checkout repository
+        if: github.event.schedule == '45 7 * * 1' || github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+
+      - name: Setup Python for RAG precompute
+        if: github.event.schedule == '45 7 * * 1' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        if: github.event.schedule == '45 7 * * 1' || github.event_name == 'workflow_dispatch'
+        run: python -m pip install -r backend/requirements.txt
+
       - name: Sync latest NYC 311 records
         run: |
           curl --fail --show-error --retry 3 --retry-delay 15 --max-time 300 \
@@ -22,26 +39,9 @@ jobs:
       - name: Refresh official RAG sources weekly
         if: github.event.schedule == '45 7 * * 1' || github.event_name == 'workflow_dispatch'
         run: |
-          JOB_ID=$(curl --fail --show-error --retry 3 --retry-delay 15 --max-time 60 \
-            -X POST "${API_BASE_URL}/rag/reindex/jobs" \
-            -H "Content-Type: application/json" \
-            -d '{"include_remote":true,"max_311_articles":120}' \
-            | python -c "import json,sys; print(json.load(sys.stdin)['id'])")
-          for attempt in $(seq 1 90); do
-            STATUS_JSON=$(curl --fail --show-error --max-time 60 "${API_BASE_URL}/rag/reindex/jobs/${JOB_ID}")
-            echo "${STATUS_JSON}"
-            STATUS=$(echo "${STATUS_JSON}" | python -c "import json,sys; print(json.load(sys.stdin)['status'])")
-            if [ "${STATUS}" = "success" ]; then
-              break
-            fi
-            if [ "${STATUS}" = "failed" ]; then
-              exit 1
-            fi
-            sleep 20
-          done
-          if [ "${STATUS}" != "success" ]; then
-            echo "RAG reindex job ${JOB_ID} did not finish in time."
-            exit 1
-          fi
+          python backend/scripts/build_and_upload_rag_index.py \
+            --api-base "${API_BASE_URL}" \
+            --max-311-articles 120 \
+            --timeout-seconds 900
           curl --fail --show-error --retry 3 --retry-delay 15 --max-time 180 \
             -X POST "${API_BASE_URL}/rag/vector-store/init"

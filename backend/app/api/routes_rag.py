@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_session
 from app.schemas.rag import (
     KnowledgeGraphResponse,
+    PrecomputedReindexRequest,
     RAGAskRequest,
     RAGAskResponse,
     RAGSourceInfo,
@@ -15,7 +16,7 @@ from app.schemas.rag import (
 )
 from app.services.rag.answerer import answer_rag_question
 from app.services.rag.embeddings import embedding_runtime_label
-from app.services.rag.indexer import index_policy_documents
+from app.services.rag.indexer import import_precomputed_policy_documents, index_policy_documents
 from app.services.rag.knowledge_graph import build_knowledge_graph
 from app.services.rag.reindex_jobs import create_reindex_job, get_latest_reindex_job, get_reindex_job, run_reindex_job
 from app.services.rag.source_loader import available_remote_sources
@@ -77,6 +78,33 @@ def reindex_job_status(job_id: int, db: Session = Depends(get_session)) -> Reind
     if job is None:
         raise HTTPException(status_code=404, detail="RAG reindex job not found.")
     return ReindexJobResponse(**job)
+
+
+@router.post("/reindex/precomputed", response_model=ReindexResponse)
+def import_precomputed_reindex(
+    request: PrecomputedReindexRequest,
+    db: Session = Depends(get_session),
+) -> ReindexResponse:
+    try:
+        result = import_precomputed_policy_documents(
+            db,
+            documents=[document.model_dump() for document in request.documents],
+            embedding_provider=request.embedding_provider,
+            embedding_model=request.embedding_model,
+            dimensions=request.dimensions,
+            warnings=request.warnings,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ReindexResponse(
+        documents_indexed=result.documents_indexed,
+        chunks_indexed=result.chunks_indexed,
+        local_sources_indexed=result.local_sources_indexed,
+        remote_sources_indexed=result.remote_sources_indexed,
+        embedding_provider=request.embedding_provider,
+        embedding_model=request.embedding_model,
+        warnings=result.warnings or [],
+    )
 
 
 @router.post("/ask", response_model=RAGAskResponse)

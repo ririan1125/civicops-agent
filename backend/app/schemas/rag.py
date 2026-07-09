@@ -67,6 +67,28 @@ class ReindexJobResponse(BaseModel):
     updated_at: datetime
 
 
+class PrecomputedChunk(BaseModel):
+    heading: str | None = None
+    content: str = Field(min_length=1)
+    token_count: int = Field(default=0, ge=0)
+    embedding: list[float]
+
+
+class PrecomputedDocument(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    source_path: str | None = None
+    source_type: str = "unknown"
+    chunks: list[PrecomputedChunk]
+
+
+class PrecomputedReindexRequest(BaseModel):
+    embedding_provider: str = Field(min_length=1, max_length=64)
+    embedding_model: str = Field(min_length=1, max_length=128)
+    dimensions: int = Field(gt=0, le=4096)
+    documents: list[PrecomputedDocument]
+    warnings: list[str] = Field(default_factory=list)
+
+
 class RAGSourceInfo(BaseModel):
     title: str
     url: str
