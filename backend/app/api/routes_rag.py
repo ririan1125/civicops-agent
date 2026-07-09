@@ -98,10 +98,7 @@ def import_precomputed_reindex(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Precomputed RAG import failed: {exc.__class__.__name__}: {exc}",
-        ) from exc
+        raise HTTPException(status_code=500, detail="Precomputed RAG import failed.") from exc
     return ReindexResponse(
         documents_indexed=result.documents_indexed,
         chunks_indexed=result.chunks_indexed,
@@ -131,7 +128,7 @@ def ask_rag(request: RAGAskRequest, db: Session = Depends(get_session)) -> RAGAs
         return response
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"RAG ask failed: {exc.__class__.__name__}: {exc}") from exc
+        raise HTTPException(status_code=500, detail="RAG ask failed.") from exc
 
 
 @router.post("/vector-store/init", response_model=VectorStoreInitResponse)
