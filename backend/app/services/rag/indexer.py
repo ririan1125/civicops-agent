@@ -81,8 +81,8 @@ def index_policy_documents(
     if not sources:
         return IndexResult(documents_indexed=0, chunks_indexed=0, warnings=warnings)
 
-    clear_policy_index(db)
     clear_pgvector_store_if_available(db)
+    clear_policy_index(db)
     documents_indexed = 0
     chunks_indexed = 0
     local_sources_indexed = 0
@@ -144,8 +144,8 @@ def import_precomputed_policy_documents(
     if dimensions <= 0:
         raise ValueError("Embedding dimensions must be positive.")
 
-    clear_policy_index(db)
     clear_pgvector_store_if_available(db)
+    clear_policy_index(db)
     documents_indexed = 0
     chunks_indexed = 0
     local_sources_indexed = 0
