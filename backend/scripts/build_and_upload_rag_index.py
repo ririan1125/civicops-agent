@@ -69,6 +69,8 @@ def upload_payload(api_base: str, payload: dict, timeout_seconds: int) -> dict:
     url = f"{api_base.rstrip('/')}/rag/reindex/precomputed"
     with httpx.Client(timeout=timeout_seconds) as client:
         response = client.post(url, json=payload)
+        if response.is_error:
+            print(response.text[:4000], flush=True)
         response.raise_for_status()
         return response.json()
 

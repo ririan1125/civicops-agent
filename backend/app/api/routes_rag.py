@@ -96,6 +96,12 @@ def import_precomputed_reindex(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Precomputed RAG import failed: {exc.__class__.__name__}: {exc}",
+        ) from exc
     return ReindexResponse(
         documents_indexed=result.documents_indexed,
         chunks_indexed=result.chunks_indexed,
