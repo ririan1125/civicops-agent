@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 
-from app.db.models import PolicyChunkEmbedding
+from app.db.models import PolicyChunk, PolicyChunkEmbedding
 from app.services.rag.embeddings import embedding_runtime_label
 
 
