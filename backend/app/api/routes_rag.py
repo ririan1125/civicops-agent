@@ -115,19 +115,23 @@ def import_precomputed_reindex(
 
 @router.post("/ask", response_model=RAGAskResponse)
 def ask_rag(request: RAGAskRequest, db: Session = Depends(get_session)) -> RAGAskResponse:
-    response, latency_ms = timed_call(lambda: answer_rag_question(db, request.question, top_k=request.top_k))
-    trace = record_trace(
-        db,
-        user_query=request.question,
-        route="rag",
-        selected_tool="rag_policy_assistant",
-        tool_input=request.model_dump(),
-        tool_output=response.model_dump(),
-        status="refused" if response.refused else "success",
-        latency_ms=latency_ms,
-    )
-    response.trace_id = trace.id
-    return response
+    try:
+        response, latency_ms = timed_call(lambda: answer_rag_question(db, request.question, top_k=request.top_k))
+        trace = record_trace(
+            db,
+            user_query=request.question,
+            route="rag",
+            selected_tool="rag_policy_assistant",
+            tool_input=request.model_dump(),
+            tool_output=response.model_dump(),
+            status="refused" if response.refused else "success",
+            latency_ms=latency_ms,
+        )
+        response.trace_id = trace.id
+        return response
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"RAG ask failed: {exc.__class__.__name__}: {exc}") from exc
 
 
 @router.post("/vector-store/init", response_model=VectorStoreInitResponse)
