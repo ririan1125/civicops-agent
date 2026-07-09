@@ -8,24 +8,55 @@ export function RAGAssistant() {
   const [result, setResult] = React.useState<RAGResponse | null>(null);
   const [status, setStatus] = React.useState("");
   const [warnings, setWarnings] = React.useState<string[]>([]);
+  const [isReindexing, setIsReindexing] = React.useState(false);
+
+  type ReindexJob = {
+    id: number;
+    status: string;
+    documents_indexed: number;
+    chunks_indexed: number;
+    local_sources_indexed: number;
+    remote_sources_indexed: number;
+    embedding_provider?: string;
+    embedding_model?: string;
+    warnings: string[];
+    error_message?: string | null;
+  };
+
+  const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
   async function reindex() {
-    const response = await api<{
-      documents_indexed: number;
-      chunks_indexed: number;
-      local_sources_indexed: number;
-      remote_sources_indexed: number;
-      embedding_provider?: string;
-      embedding_model?: string;
-      warnings: string[];
-    }>("/rag/reindex", {
-      method: "POST",
-      body: JSON.stringify({ include_remote: true, max_311_articles: 120 })
-    });
-    setWarnings(response.warnings || []);
-    setStatus(
-      `Indexed ${response.documents_indexed} documents (${response.local_sources_indexed} local, ${response.remote_sources_indexed} remote) and ${response.chunks_indexed} chunks with ${response.embedding_provider || "embedding"} / ${response.embedding_model || "model"}.`
-    );
+    setIsReindexing(true);
+    setWarnings([]);
+    try {
+      const started = await api<ReindexJob>("/rag/reindex/jobs", {
+        method: "POST",
+        body: JSON.stringify({ include_remote: true, max_311_articles: 120 })
+      });
+      setStatus(`Started BGE reindex job #${started.id}. Status: ${started.status}.`);
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        await wait(attempt < 3 ? 2000 : 5000);
+        const job = await api<ReindexJob>(`/rag/reindex/jobs/${started.id}`);
+        setStatus(
+          `BGE reindex job #${job.id}: ${job.status}. Indexed ${job.documents_indexed} documents and ${job.chunks_indexed} chunks.`
+        );
+        if (job.status === "success") {
+          setWarnings(job.warnings || []);
+          setStatus(
+            `Indexed ${job.documents_indexed} documents (${job.local_sources_indexed} local, ${job.remote_sources_indexed} remote) and ${job.chunks_indexed} chunks with ${job.embedding_provider || "embedding"} / ${job.embedding_model || "model"}.`
+          );
+          return;
+        }
+        if (job.status === "failed") {
+          setWarnings(job.warnings || []);
+          setStatus(`BGE reindex job #${job.id} failed: ${job.error_message || "unknown error"}`);
+          return;
+        }
+      }
+      setStatus(`BGE reindex job #${started.id} is still running. Check API docs for the latest status.`);
+    } finally {
+      setIsReindexing(false);
+    }
   }
 
   async function ask() {
@@ -43,7 +74,7 @@ export function RAGAssistant() {
         <button onClick={ask}>
           <FileSearch size={16} /> Ask
         </button>
-        <button className="secondary" onClick={reindex}>
+        <button className="secondary" onClick={reindex} disabled={isReindexing}>
           <RefreshCcw size={16} /> Refresh official docs
         </button>
       </div>

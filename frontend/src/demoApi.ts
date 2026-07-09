@@ -105,6 +105,25 @@ const ragCitations = [
   }
 ];
 
+const demoReindexJob = {
+  id: 12,
+  status: "success",
+  include_remote: true,
+  max_311_articles: 120,
+  documents_indexed: 133,
+  chunks_indexed: 1802,
+  local_sources_indexed: 6,
+  remote_sources_indexed: 127,
+  embedding_provider: "bge",
+  embedding_model: "BAAI/bge-small-en-v1.5",
+  warnings: [],
+  error_message: null,
+  created_at: now(),
+  started_at: now(),
+  finished_at: now(),
+  updated_at: now()
+};
+
 function sqlResponse(question: string) {
   return {
     question,
@@ -211,6 +230,15 @@ export async function demoApi<T>(path: string, options?: RequestInit): Promise<T
       embedding_model: "BAAI/bge-small-en-v1.5",
       warnings: []
     } as T;
+  }
+  if (path === "/rag/reindex/jobs" && method === "POST") {
+    return { ...demoReindexJob, status: "running", documents_indexed: 0, chunks_indexed: 0, finished_at: null } as T;
+  }
+  if (path === "/rag/reindex/jobs/latest") {
+    return demoReindexJob as T;
+  }
+  if (/^\/rag\/reindex\/jobs\/\d+$/.test(path)) {
+    return demoReindexJob as T;
   }
   if (path === "/rag/ask" && method === "POST") {
     return ragResponse(body.question || "What SQL statements is the agent allowed to execute?") as T;

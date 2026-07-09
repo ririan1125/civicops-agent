@@ -210,6 +210,9 @@ This should route to RAG.
 | `POST /agent/route` | Agent tool routing and execution |
 | `GET /rag/sources` | List configured official remote RAG sources |
 | `POST /rag/reindex` | Rebuild local and official document index |
+| `POST /rag/reindex/jobs` | Start a background RAG rebuild job for production-safe refresh |
+| `GET /rag/reindex/jobs/{job_id}` | Check background RAG rebuild status |
+| `GET /rag/reindex/jobs/latest` | Check the latest background RAG rebuild job |
 | `POST /rag/ask` | Hybrid RAG question answering |
 | `POST /rag/vector-store/init` | PostgreSQL pgvector table, backfill, and HNSW index initialization |
 | `GET /rag/vector-store/schema` | Show RAG collection, physical table, index, dimensions, and logical partitions |
@@ -262,12 +265,21 @@ cd "D:\Backup\Documents\agent开发\backend"
 .\.venv\Scripts\python -m pytest -q
 ```
 
-Refresh official RAG sources locally:
+Refresh official RAG sources locally with the synchronous endpoint:
 
 ```powershell
 curl -X POST http://localhost:8000/rag/reindex `
   -H "Content-Type: application/json" `
   -d "{\"include_remote\":true,\"max_311_articles\":120}"
+```
+
+Refresh official RAG sources in deployment-safe background mode:
+
+```powershell
+$job = curl.exe -s -X POST http://localhost:8000/rag/reindex/jobs `
+  -H "Content-Type: application/json" `
+  -d "{\"include_remote\":true,\"max_311_articles\":120}" | ConvertFrom-Json
+curl.exe http://localhost:8000/rag/reindex/jobs/$($job.id)
 ```
 
 Initialize pgvector locally on PostgreSQL:
@@ -311,7 +323,7 @@ Embedding comparison flow:
 
 ```text
 1. Set EMBEDDING_PROVIDER / EMBEDDING_MODEL when testing another model.
-2. Run POST /rag/reindex.
+2. Run POST /rag/reindex/jobs and wait for success, or use POST /rag/reindex for local synchronous rebuilds.
 3. Run POST /evals/rag-retrieval for the full hybrid retrieval score.
 4. Run POST /evals/embedding-benchmark for vector-only current-model comparison.
 5. Compare Recall@1, Recall@3, Recall@5, MRR, latency, and cost across runs.
@@ -354,7 +366,7 @@ GET /rag/vector-store/schema
 The live deployment also has a GitHub Actions workflow at `.github/workflows/daily-data-sync.yml`:
 
 - daily: `POST /ingestion/sync-latest` to upsert new/recent NYC 311 rows;
-- weekly: `POST /rag/reindex` and `POST /rag/vector-store/init` to refresh official documents and pgvector rows.
+- weekly: `POST /rag/reindex/jobs`, polling `GET /rag/reindex/jobs/{job_id}`, then `POST /rag/vector-store/init` to refresh official documents and pgvector rows.
 
 ## Current Boundaries
 
@@ -362,7 +374,7 @@ The live deployment also has a GitHub Actions workflow at `.github/workflows/dai
 - Public admin-like endpoints are acceptable for this demo, but should be protected before real use.
 - PostgreSQL deployments use pgvector when initialized; local SQLite development uses JSON vectors as fallback.
 - Multimodal support currently means text extraction from PDFs plus OCR/caption text ingestion for images; true image embeddings require a multimodal embedding provider.
-- RAG reindex is currently a synchronous admin endpoint; very large crawls should move to a background job queue.
+- RAG reindex supports both synchronous local rebuilds and background rebuild jobs for deployed environments.
 - Render free tier can sleep.
 - The system can stay fresh with NYC Open Data, but cannot exceed the upstream update cadence.
 

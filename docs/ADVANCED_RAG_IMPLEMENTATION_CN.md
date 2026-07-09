@@ -249,7 +249,7 @@ Embedding benchmark：
 POST /evals/embedding-benchmark
 ```
 
-它会读取当前数据库里已索引的 embedding 向量，做 vector-only ranking。换 embedding model 后必须先 `/rag/reindex`，否则 benchmark 仍然评估旧向量。
+它会读取当前数据库里已索引的 embedding 向量，做 vector-only ranking。换 embedding model 后必须先跑 `/rag/reindex/jobs` 并等任务成功，或者本地用 `/rag/reindex` 同步重建；否则 benchmark 仍然评估旧向量。
 
 ## 11. 数据更新
 
@@ -264,7 +264,8 @@ POST /ingestion/sync-latest
 RAG 文档每周刷新：
 
 ```text
-POST /rag/reindex
+POST /rag/reindex/jobs
+GET /rag/reindex/jobs/{job_id}
 POST /rag/vector-store/init
 ```
 
@@ -275,13 +276,13 @@ GitHub Actions workflow：
 ```
 
 - 每天触发 SQL 增量同步。
-- 每周一刷新官方 RAG 文档并重建 pgvector mirror。
+- 每周一启动后台 RAG 重建任务，轮询任务状态，成功后检查/重建 pgvector mirror。
 
 ## 12. 当前边界
 
 - 线上 BGE 模型是 `BAAI/bge-small-en-v1.5`，不是更大的 BGE-M3。
 - 多模态目前是 PDF 文本层 + 图片 OCR/caption 文本检索，不是真正 image embedding。
-- `reindex` 是同步 HTTP endpoint，大规模抓取 500+ 或 1000+ 文档时应改成后台队列。
+- `/rag/reindex/jobs` 已经是后台重建任务；`/rag/reindex` 仍保留给本地同步调试。
 - public demo 暂时没有生产鉴权，真实系统需要保护 ingestion/reindex 这类 admin endpoint。
 - 当前知识图谱是轻量共现图，不是完整知识图谱存储。
 

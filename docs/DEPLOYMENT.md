@@ -76,7 +76,8 @@ POST /ingestion/sync-latest
 RAG documents are refreshed by:
 
 ```text
-POST /rag/reindex
+POST /rag/reindex/jobs
+GET /rag/reindex/jobs/{job_id}
 POST /rag/vector-store/init
 ```
 
@@ -87,7 +88,7 @@ Automation:
 ```
 
 - Daily: sync latest NYC 311 records.
-- Weekly on Monday UTC: refresh official RAG sources and rebuild pgvector mirror.
+- Weekly on Monday UTC: start a background RAG refresh, poll the job until success, and rebuild/check the pgvector mirror.
 
 ## Manual Verification
 
@@ -119,5 +120,5 @@ https://ririan1125.github.io/civicops-agent/
 
 - Render free tier can sleep and has resource limits.
 - Public admin-like endpoints should be protected before real production use.
-- Reindexing is synchronous; larger crawls should move to a background queue.
-- Live embedding defaults to the open-source `BAAI/bge-small-en-v1.5` model through FastEmbed/ONNX.
+- Reindexing supports a background job endpoint so BGE indexing does not depend on one long HTTP request.
+- Live embedding defaults to the open-source `BAAI/bge-small-en-v1.5` model through FastEmbed/ONNX, with the model cache preloaded into the Docker image.

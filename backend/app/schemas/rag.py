@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -44,6 +46,25 @@ class VectorStoreSchemaResponse(BaseModel):
 class ReindexRequest(BaseModel):
     include_remote: bool = True
     max_311_articles: int | None = Field(default=None, ge=0, le=300)
+
+
+class ReindexJobResponse(BaseModel):
+    id: int
+    status: str
+    include_remote: bool
+    max_311_articles: int | None = None
+    documents_indexed: int = 0
+    chunks_indexed: int = 0
+    local_sources_indexed: int = 0
+    remote_sources_indexed: int = 0
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    updated_at: datetime
 
 
 class RAGSourceInfo(BaseModel):

@@ -22,7 +22,26 @@ jobs:
       - name: Refresh official RAG sources weekly
         if: github.event.schedule == '45 7 * * 1' || github.event_name == 'workflow_dispatch'
         run: |
-          curl --fail --show-error --retry 3 --retry-delay 15 --max-time 420 \
-            -X POST "${API_BASE_URL}/rag/reindex" \
+          JOB_ID=$(curl --fail --show-error --retry 3 --retry-delay 15 --max-time 60 \
+            -X POST "${API_BASE_URL}/rag/reindex/jobs" \
             -H "Content-Type: application/json" \
-            -d '{"include_remote":true,"max_311_articles":120}'
+            -d '{"include_remote":true,"max_311_articles":120}' \
+            | python -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          for attempt in $(seq 1 90); do
+            STATUS_JSON=$(curl --fail --show-error --max-time 60 "${API_BASE_URL}/rag/reindex/jobs/${JOB_ID}")
+            echo "${STATUS_JSON}"
+            STATUS=$(echo "${STATUS_JSON}" | python -c "import json,sys; print(json.load(sys.stdin)['status'])")
+            if [ "${STATUS}" = "success" ]; then
+              break
+            fi
+            if [ "${STATUS}" = "failed" ]; then
+              exit 1
+            fi
+            sleep 20
+          done
+          if [ "${STATUS}" != "success" ]; then
+            echo "RAG reindex job ${JOB_ID} did not finish in time."
+            exit 1
+          fi
+          curl --fail --show-error --retry 3 --retry-delay 15 --max-time 180 \
+            -X POST "${API_BASE_URL}/rag/vector-store/init"

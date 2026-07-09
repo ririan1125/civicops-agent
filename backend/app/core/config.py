@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 384
     embedding_batch_size: int = 64
     embedding_cache_dir: str | None = None
+    embedding_threads: int = 1
     embedding_query_instruction: str = "Represent this sentence for searching relevant passages: "
     nyc_311_endpoint: str = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
     rag_include_remote_sources: bool = False

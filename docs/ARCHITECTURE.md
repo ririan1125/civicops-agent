@@ -53,12 +53,12 @@ If a question mixes both, the planner chooses the most direct tool first. A prod
 
 NYC 311 records change over time. The system supports manual imports and incremental sync. Incremental sync looks back over recent records and upserts them by `unique_key`, which captures new requests and status changes for recently created requests.
 
-Official documentation can also change. The RAG reindex endpoint can refresh remote official sources and rebuild the chunk index. The GitHub Actions workflow calls the data sync endpoint daily and refreshes RAG sources plus the pgvector mirror weekly.
+Official documentation can also change. The RAG reindex job endpoint can refresh remote official sources and rebuild the chunk index without holding one long HTTP request open. The GitHub Actions workflow calls the data sync endpoint daily and starts a background RAG refresh plus pgvector mirror check weekly.
 
 ## Current Production Tradeoffs
 
-The public demo uses DeepSeek for chat generation when the Render secret is configured. It defaults to local deterministic embeddings unless an external embedding API is configured. This keeps the public system reproducible without committing secrets.
+The public demo uses DeepSeek for chat generation when the Render secret is configured. Retrieval uses the open-source `BAAI/bge-small-en-v1.5` embedding model through FastEmbed/ONNX. The deterministic `local_hash` provider remains only for unit tests and offline debugging.
 
-The current PostgreSQL deployment supports pgvector/HNSW vector recall. JSON vector scoring remains as a local development fallback. A larger production corpus should move reindexing to background jobs, add source freshness metadata, compare a production embedding provider, and protect admin endpoints.
+The current PostgreSQL deployment supports pgvector/HNSW vector recall. JSON vector scoring remains as a local development fallback. A larger production corpus should add source freshness metadata, compare BGE-M3 or larger open-source embedding models, and protect admin endpoints.
 
 Detailed Chinese implementation notes: [docs/ADVANCED_RAG_IMPLEMENTATION_CN.md](ADVANCED_RAG_IMPLEMENTATION_CN.md).

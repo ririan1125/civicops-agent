@@ -130,5 +130,5 @@ Additional dimensions to add later:
 
 - Live deployment defaults to the open-source `BAAI/bge-small-en-v1.5` embedding model through FastEmbed/ONNX.
 - Current multimodal support indexes PDF text and image OCR/caption text; true image embeddings require a multimodal embedding provider.
-- Reindexing is synchronous and should become a background job for larger crawls.
+- Reindexing supports background jobs through `/rag/reindex/jobs`; `/rag/reindex` remains available for local synchronous rebuilds.
 - Admin-like endpoints need authentication before production use.

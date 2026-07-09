@@ -194,6 +194,17 @@ def sync_pgvector_store_if_available(db: Session) -> dict | None:
         return None
 
 
+def clear_pgvector_store_if_available(db: Session) -> None:
+    if not _is_postgresql(db):
+        return
+    try:
+        if _pgvector_table_exists(db):
+            db.execute(text("DELETE FROM rag_vector_embeddings"))
+            db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
 def search_pgvector(db: Session, query_embedding: list[float], limit: int = 80) -> dict[int, float]:
     if not query_embedding or not _is_postgresql(db):
         return {}

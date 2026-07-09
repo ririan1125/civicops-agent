@@ -99,7 +99,8 @@ def _fastembed_model(model_name: str, cache_dir: str | None):
     except ImportError as exc:
         raise EmbeddingProviderError("BGE embeddings require the fastembed package.") from exc
 
-    kwargs = {"model_name": model_name}
+    settings = get_settings()
+    kwargs = {"model_name": model_name, "threads": max(1, settings.embedding_threads)}
     if cache_dir:
         kwargs["cache_dir"] = cache_dir
     try:

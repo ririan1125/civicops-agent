@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
@@ -7,6 +7,7 @@ from app.schemas.rag import (
     RAGAskRequest,
     RAGAskResponse,
     RAGSourceInfo,
+    ReindexJobResponse,
     ReindexRequest,
     ReindexResponse,
     VectorStoreInitResponse,
@@ -16,6 +17,7 @@ from app.services.rag.answerer import answer_rag_question
 from app.services.rag.embeddings import embedding_runtime_label
 from app.services.rag.indexer import index_policy_documents
 from app.services.rag.knowledge_graph import build_knowledge_graph
+from app.services.rag.reindex_jobs import create_reindex_job, get_latest_reindex_job, get_reindex_job, run_reindex_job
 from app.services.rag.source_loader import available_remote_sources
 from app.services.rag.vector_store import describe_vector_store, initialize_pgvector_store
 from app.services.tracing.trace_service import record_trace, timed_call
@@ -46,6 +48,35 @@ def reindex_policy_docs(
         embedding_model=embedding_model,
         warnings=result.warnings or [],
     )
+
+
+@router.post("/reindex/jobs", response_model=ReindexJobResponse)
+def start_reindex_job(
+    background_tasks: BackgroundTasks,
+    request: ReindexRequest | None = None,
+    db: Session = Depends(get_session),
+) -> ReindexJobResponse:
+    include_remote = True if request is None else request.include_remote
+    max_311_articles = None if request is None else request.max_311_articles
+    job = create_reindex_job(db, include_remote=include_remote, max_311_articles=max_311_articles)
+    background_tasks.add_task(run_reindex_job, job["id"])
+    return ReindexJobResponse(**job)
+
+
+@router.get("/reindex/jobs/latest", response_model=ReindexJobResponse)
+def latest_reindex_job(db: Session = Depends(get_session)) -> ReindexJobResponse:
+    job = get_latest_reindex_job(db)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No RAG reindex job has been created.")
+    return ReindexJobResponse(**job)
+
+
+@router.get("/reindex/jobs/{job_id}", response_model=ReindexJobResponse)
+def reindex_job_status(job_id: int, db: Session = Depends(get_session)) -> ReindexJobResponse:
+    job = get_reindex_job(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="RAG reindex job not found.")
+    return ReindexJobResponse(**job)
 
 
 @router.post("/ask", response_model=RAGAskResponse)

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -88,6 +88,27 @@ class PolicyChunkEmbedding(Base):
     vector: Mapped[list[float]] = mapped_column(JSON)
 
     chunk: Mapped[PolicyChunk] = relationship(back_populates="embedding")
+
+
+class RagIndexJob(Base):
+    __tablename__ = "rag_index_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    status: Mapped[str] = mapped_column(String(64), default="queued", index=True)
+    include_remote: Mapped[bool] = mapped_column(Boolean, default=True)
+    max_311_articles: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    documents_indexed: Mapped[int] = mapped_column(Integer, default=0)
+    chunks_indexed: Mapped[int] = mapped_column(Integer, default=0)
+    local_sources_indexed: Mapped[int] = mapped_column(Integer, default=0)
+    remote_sources_indexed: Mapped[int] = mapped_column(Integer, default=0)
+    embedding_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    warnings: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utc_now, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utc_now, onupdate=utc_now)
 
 
 class AgentTrace(Base):

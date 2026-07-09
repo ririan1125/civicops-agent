@@ -43,6 +43,8 @@ services:
         value: 32
       - key: EMBEDDING_CACHE_DIR
         value: /app/.cache/fastembed
+      - key: EMBEDDING_THREADS
+        value: 1
       - key: RAG_INCLUDE_REMOTE_SOURCES
         value: "true"
       - key: RAG_REMOTE_TIMEOUT_SECONDS
